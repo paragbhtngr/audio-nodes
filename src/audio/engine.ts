@@ -35,7 +35,11 @@ class AudioEngine {
 
   destroy() {
     this.unsub?.();
+    this.unsub = null;
     this.ctx?.close();
+    this.ctx = null;
+    this.masterGain = null;
+    this.tracks.clear();
   }
 
   private async reconcile(project: Project) {

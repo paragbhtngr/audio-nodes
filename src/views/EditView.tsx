@@ -124,6 +124,7 @@ function LibraryPanel() {
   const removeAudioFile = useStore((s) => s.removeAudioFile);
 
   const pickFiles = async () => {
+    if (!window.audioNodes) return;
     const paths = await window.audioNodes.pickAudioFiles();
     for (const filePath of paths) {
       const name = filePath.split('/').pop()?.replace(/\.[^.]+$/, '') ?? filePath;
@@ -177,6 +178,7 @@ function MenuHandler() {
   const project = useStore((s) => s.project);
 
   useEffect(() => {
+    if (!window.audioNodes) return;
     const unsub = window.audioNodes.onMenuAction(async (action) => {
       if (action === 'new') {
         newProject();

@@ -17,6 +17,16 @@ export default defineConfig({
       },
       preload: {
         input: path.join(__dirname, "electron/preload.ts"),
+        vite: {
+          build: {
+            rollupOptions: {
+              external: ['electron'],
+              output: {
+                format: 'es',
+              },
+            },
+          },
+        },
       },
     }),
   ],
