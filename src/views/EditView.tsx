@@ -21,16 +21,27 @@ import { SoundNode } from '../components/nodes/SoundNode';
 import { GroupNode } from '../components/nodes/GroupNode';
 import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
-import type { AudioFile, AudioNodeData, SoundNodeData } from '../types';
+import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData } from '../types';
 
 const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode };
 
-function toRFNode(n: { id: string; type: string; position: { x: number; y: number }; data: AudioNodeData }): Node {
-  return { id: n.id, type: n.type, position: n.position, data: n.data as unknown as Record<string, unknown> };
+function toRFNode(n: { id: string; type: string; position: { x: number; y: number }; data: AudioNodeData }, hidden = false): Node {
+  return { id: n.id, type: n.type, position: n.position, data: n.data as unknown as Record<string, unknown>, hidden };
 }
 
-function toRFEdge(e: { id: string; source: string; target: string }): Edge {
-  return { id: e.id, source: e.source, target: e.target };
+function toRFEdge(e: { id: string; source: string; target: string }, hidden = false): Edge {
+  return { id: e.id, source: e.source, target: e.target, hidden };
+}
+
+function collapsedHiddenIds(project: { nodes: { id: string; type: string; data: AudioNodeData }[]; edges: { source: string; target: string }[] }) {
+  const collapsedGroupIds = new Set(
+    project.nodes
+      .filter((n) => n.type === 'group' && (n.data as GroupNodeData).collapsed)
+      .map((n) => n.id)
+  );
+  return new Set(
+    project.edges.filter((e) => collapsedGroupIds.has(e.target)).map((e) => e.source)
+  );
 }
 
 // Serialize paths to relative before saving, restore after loading
@@ -59,25 +70,33 @@ function Canvas() {
   const { addSoundNode, addGroupNode, addAudioFile, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
   const { screenToFlowPosition } = useReactFlow();
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(project.nodes.map(toRFNode));
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(project.edges.map(toRFEdge));
+  const hiddenIds = collapsedHiddenIds(project);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(project.nodes.map((n) => toRFNode(n, hiddenIds.has(n.id))));
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(project.edges.map((e) => toRFEdge(e, hiddenIds.has(e.source))));
 
   const prevProjectRef = useRef(project);
   useEffect(() => {
     if (prevProjectRef.current !== project) {
-      setNodes(project.nodes.map(toRFNode));
-      setEdges(project.edges.map(toRFEdge));
+      const hids = collapsedHiddenIds(project);
+      setNodes(project.nodes.map((n) => toRFNode(n, hids.has(n.id))));
+      setEdges(project.edges.map((e) => toRFEdge(e, hids.has(e.source))));
       prevProjectRef.current = project;
     }
   }, [project, setNodes, setEdges]);
 
   // keep RF node data in sync when audio state changes
   useEffect(() => {
+    const hids = collapsedHiddenIds(project);
     setNodes((rn) =>
       rn.map((rfNode) => {
         const stored = project.nodes.find((n) => n.id === rfNode.id);
-        return stored ? { ...rfNode, data: stored.data as unknown as Record<string, unknown> } : rfNode;
+        return stored
+          ? { ...rfNode, data: stored.data as unknown as Record<string, unknown>, hidden: hids.has(rfNode.id) }
+          : rfNode;
       })
+    );
+    setEdges((re) =>
+      re.map((rfEdge) => ({ ...rfEdge, hidden: hids.has(rfEdge.source) }))
     );
   }, [project.nodes, setNodes]);
 
@@ -296,25 +315,32 @@ function LibraryPanel() {
 function HotkeyHandler() {
   const hotkeys = useStore((s) => s.project.hotkeys);
   const nodes = useStore((s) => s.project.nodes);
+  const edges = useStore((s) => s.project.edges);
   const updateNodeData = useStore((s) => s.updateNodeData);
 
-  // re-register global shortcuts whenever hotkeys change
   useEffect(() => {
     if (!window.audioNodes) return;
     window.audioNodes.registerHotkeys(hotkeys);
   }, [hotkeys]);
 
-  // handle triggered hotkeys from main process
   useEffect(() => {
     if (!window.audioNodes) return;
     return window.audioNodes.onHotkeyTriggered((key) => {
       const nodeId = hotkeys[key];
       if (!nodeId) return;
       const node = nodes.find((n) => n.id === nodeId);
-      if (!node || node.type !== 'sound') return;
-      updateNodeData(nodeId, { playing: !(node.data as SoundNodeData).playing });
+      if (!node) return;
+
+      if (node.type === 'sound') {
+        updateNodeData(nodeId, { playing: !(node.data as SoundNodeData).playing });
+      } else if (node.type === 'group') {
+        const memberIds = new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source));
+        const members = nodes.filter((n) => memberIds.has(n.id) && n.type === 'sound');
+        const anyPlaying = members.some((n) => (n.data as SoundNodeData).playing);
+        members.forEach((n) => updateNodeData(n.id, { playing: !anyPlaying }));
+      }
     });
-  }, [hotkeys, nodes, updateNodeData]);
+  }, [hotkeys, nodes, edges, updateNodeData]);
 
   return null;
 }

@@ -103,6 +103,8 @@ function HotkeyField({ nodeId }: { nodeId: string }) {
   );
 }
 
+const GROUP_COLORS = ['#bb9af7', '#7aa2f7', '#9ece6a', '#e0af68', '#f7768e', '#2ac3de', '#ff9e64', '#73daca'];
+
 function GroupInspector({ id }: { id: string }) {
   const data = useStore((s) => {
     const node = s.project.nodes.find((n) => n.id === id);
@@ -110,8 +112,44 @@ function GroupInspector({ id }: { id: string }) {
   });
   const update = useStore((s) => s.updateNodeData);
   if (!data) return null;
+
   return (
     <>
+      <div className="insp__section-title">Identity</div>
+      <div className="insp__field">
+        <div className="insp__row">
+          <span className="insp__label">Icon</span>
+          <input
+            className="insp__emoji"
+            value={data.icon}
+            placeholder="emoji"
+            maxLength={2}
+            onChange={(e) => update(id, { icon: e.target.value })}
+          />
+        </div>
+      </div>
+
+      <div className="insp__field">
+        <span className="insp__label">Color</span>
+        <div className="insp__color-row">
+          {GROUP_COLORS.map((c) => (
+            <button
+              key={c}
+              className={`insp__swatch ${data.color === c ? 'insp__swatch--active' : ''}`}
+              style={{ background: c }}
+              onClick={() => update(id, { color: c })}
+            />
+          ))}
+          <input
+            type="color"
+            className="insp__color-custom"
+            value={data.color}
+            onChange={(e) => update(id, { color: e.target.value })}
+            title="Custom color"
+          />
+        </div>
+      </div>
+
       <div className="insp__section-title">Output</div>
       <SliderRow
         label="Volume"
@@ -120,6 +158,9 @@ function GroupInspector({ id }: { id: string }) {
         display={`${Math.round(data.volume * 100)}%`}
         onChange={(v) => update(id, { volume: v })}
       />
+
+      <div className="insp__section-title">Hotkey</div>
+      <HotkeyField nodeId={id} />
     </>
   );
 }

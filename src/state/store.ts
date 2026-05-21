@@ -107,7 +107,7 @@ export const useStore = create<StoreState>((set) => ({
       id,
       type: 'group',
       position,
-      data: { kind: 'group', label: 'Group', volume: 1 },
+      data: { kind: 'group', label: 'Group', icon: '', color: '#bb9af7', volume: 1, collapsed: false },
     };
     const autoEdge: ProjectEdge = {
       id: `edge-${id}-${MASTER_NODE_ID}`,

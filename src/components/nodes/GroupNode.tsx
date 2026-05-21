@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
-import type { GroupNodeData } from '../../types';
+import type { GroupNodeData, SoundNodeData } from '../../types';
 
 export function GroupNode({ id }: NodeProps) {
   const data = useStore((s) => {
@@ -10,6 +10,7 @@ export function GroupNode({ id }: NodeProps) {
   });
   const edges = useStore((s) => s.project.edges);
   const nodes = useStore((s) => s.project.nodes);
+  const library = useStore((s) => s.project.library);
   const updateNodeData = useStore((s) => s.updateNodeData);
   const removeNode = useStore((s) => s.removeNode);
 
@@ -26,7 +27,9 @@ export function GroupNode({ id }: NodeProps) {
   const members = edges
     .filter((e) => e.target === id)
     .map((e) => nodes.find((n) => n.id === e.source))
-    .filter(Boolean);
+    .filter(Boolean) as typeof nodes;
+
+  const anyPlaying = members.some((n) => n.type === 'sound' && (n.data as SoundNodeData).playing);
 
   const commitLabel = () => {
     const trimmed = draft.trim();
@@ -34,11 +37,21 @@ export function GroupNode({ id }: NodeProps) {
     setEditingLabel(false);
   };
 
+  const toggleCollapse = () => updateNodeData(id, { collapsed: !data.collapsed });
+
+  const memberName = (n: typeof nodes[number]) => {
+    if (n.type !== 'sound') return n.type;
+    const d = n.data as SoundNodeData;
+    return d.fileId ? (library.find((f) => f.id === d.fileId)?.name ?? 'Sound') : 'Sound';
+  };
+
   return (
-    <div className="an-node an-node--group">
+    <div className="an-node an-node--group" style={{ borderColor: data.color }}>
       <Handle type="target" position={Position.Left} />
 
-      <div className="an-node__header">
+      <div className="an-node__header" style={{ color: data.color }}>
+        {data.icon && <span className="an-node__icon">{data.icon}</span>}
+
         {editingLabel ? (
           <input
             ref={labelRef}
@@ -55,12 +68,20 @@ export function GroupNode({ id }: NodeProps) {
         ) : (
           <span
             className="an-node__label-text"
-            title="Click to rename"
+            title="Double-click to rename"
             onDoubleClick={() => { setDraft(data.label); setEditingLabel(true); }}
           >
             {data.label}
           </span>
         )}
+
+        <button
+          className="an-node__collapse"
+          onClick={toggleCollapse}
+          title={data.collapsed ? 'Expand members' : 'Collapse members'}
+        >
+          {data.collapsed ? '▸' : '▾'}
+        </button>
         <button className="an-node__delete" onClick={() => removeNode(id)} title="Remove group">×</button>
       </div>
 
@@ -76,18 +97,26 @@ export function GroupNode({ id }: NodeProps) {
           value={data.volume}
           onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
         />
-        {members.length > 0 && (
-          <div className="an-node__members">
-            {members.map((n) => (
-              <span key={n!.id} className="an-node__member-chip">
-                {n!.type === 'sound'
-                  ? ((n!.data as { fileId?: string | null }).fileId
-                      ? useStore.getState().project.library.find((f) => f.id === (n!.data as { fileId: string }).fileId)?.name ?? 'Sound'
-                      : 'Sound')
-                  : n!.type}
-              </span>
-            ))}
+
+        {data.collapsed ? (
+          <div className="an-node__collapsed-badge" style={{ borderColor: data.color, color: data.color }}>
+            {members.length} sound{members.length !== 1 ? 's' : ''}
+            {anyPlaying && <span className="an-node__playing-dot" />}
           </div>
+        ) : (
+          members.length > 0 && (
+            <div className="an-node__members">
+              {members.map((n) => (
+                <span
+                  key={n.id}
+                  className="an-node__member-chip"
+                  style={{ borderColor: `${data.color}55`, background: `${data.color}15`, color: data.color }}
+                >
+                  {memberName(n)}
+                </span>
+              ))}
+            </div>
+          )
         )}
       </div>
 

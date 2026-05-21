@@ -27,7 +27,10 @@ export interface MasterNodeData {
 export interface GroupNodeData {
   kind: 'group';
   label: string;
+  icon: string;
+  color: string;
   volume: number;
+  collapsed: boolean;
 }
 
 export type AudioNodeData = SoundNodeData | MasterNodeData | GroupNodeData;
