@@ -55,7 +55,7 @@ async function deserializeProject(json: string, projectPath: string): Promise<ob
 
 function Canvas() {
   const project = useStore((s) => s.project);
-  const { addSoundNode, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
+  const { addSoundNode, addAudioFile, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
   const { screenToFlowPosition } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(project.nodes.map(toRFNode));
@@ -111,18 +111,50 @@ function Canvas() {
     e.dataTransfer.dropEffect = 'copy';
   }, []);
 
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const fileId = e.dataTransfer.getData('fileId') || null;
-      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+  const spawnNode = useCallback(
+    (fileId: string | null, position: { x: number; y: number }) => {
       const id = addSoundNode(fileId, position);
       const newNode = toRFNode(useStore.getState().project.nodes.find((n) => n.id === id)!);
       const autoEdge = toRFEdge({ id: `edge-${id}-master-out`, source: id, target: 'master-out' });
       setNodes((nds) => [...nds, newNode]);
       setEdges((eds) => [...eds, autoEdge]);
     },
-    [addSoundNode, screenToFlowPosition, setNodes, setEdges]
+    [addSoundNode, setNodes, setEdges]
+  );
+
+  const audioExts = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus']);
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+
+      // Files dragged from Finder / Explorer
+      if (e.dataTransfer.files.length > 0) {
+        Array.from(e.dataTransfer.files).forEach((file, i) => {
+          const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+          if (!audioExts.has(ext)) return;
+          const filePath = file.path;
+          if (!filePath) return;
+
+          const existing = useStore.getState().project.library.find((f) => f.path === filePath);
+          let fileId: string;
+          if (existing) {
+            fileId = existing.id;
+          } else {
+            fileId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+            addAudioFile({ id: fileId, path: filePath, name: file.name.replace(/\.[^.]+$/, '') });
+          }
+          spawnNode(fileId, { x: position.x + i * 220, y: position.y });
+        });
+        return;
+      }
+
+      // File dragged from the library sidebar
+      const fileId = e.dataTransfer.getData('fileId') || null;
+      spawnNode(fileId, position);
+    },
+    [addAudioFile, spawnNode, screenToFlowPosition, audioExts]
   );
 
   return (
