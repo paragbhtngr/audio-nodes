@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useStore } from '../../state/store';
 import { usePrefabStore } from '../../state/prefabStore';
 import { audioEngine } from '../../audio/engine';
@@ -219,8 +219,10 @@ function GroupInspector({ id }: { id: string }) {
 }
 
 function CrossfadeSection({ groupId }: { groupId: string }) {
-  const groups = useStore((s) =>
-    s.project.nodes.filter((n) => n.type === 'group' && n.id !== groupId)
+  const nodes = useStore((s) => s.project.nodes);
+  const groups = useMemo(
+    () => nodes.filter((n) => n.type === 'group' && n.id !== groupId),
+    [nodes, groupId]
   );
   const [targetId, setTargetId] = useState('');
   const [duration, setDuration] = useState(3);
@@ -263,7 +265,8 @@ function CrossfadeSection({ groupId }: { groupId: string }) {
 }
 
 function DuckingSection({ nodeId, data }: { nodeId: string; data: SoundNodeData | RandomPoolNodeData }) {
-  const groups = useStore((s) => s.project.nodes.filter((n) => n.type === 'group'));
+  const nodes = useStore((s) => s.project.nodes);
+  const groups = useMemo(() => nodes.filter((n) => n.type === 'group'), [nodes]);
   const update = useStore((s) => s.updateNodeData);
 
   const toggle = (groupId: string) => {
