@@ -30,6 +30,11 @@ export function GroupNode({ id }: NodeProps) {
     .filter(Boolean) as typeof nodes;
 
   const anyPlaying = members.some((n) => n.type === 'sound' && (n.data as SoundNodeData).playing);
+  const soundMembers = members.filter((n) => n.type === 'sound');
+
+  const toggleAll = () => {
+    soundMembers.forEach((n) => updateNodeData(n.id, { playing: !anyPlaying }));
+  };
 
   const commitLabel = () => {
     const trimmed = draft.trim();
@@ -118,6 +123,15 @@ export function GroupNode({ id }: NodeProps) {
             </div>
           )
         )}
+
+        <button
+          className={`an-btn nodrag ${anyPlaying ? 'an-btn--stop' : 'an-btn--play'} an-node__play-all`}
+          onClick={toggleAll}
+          disabled={soundMembers.length === 0}
+          style={anyPlaying ? {} : { borderColor: data.color, color: data.color, background: `${data.color}15` }}
+        >
+          {anyPlaying ? '■ Stop All' : '▶ Play All'}
+        </button>
       </div>
 
       <Handle type="source" position={Position.Right} />

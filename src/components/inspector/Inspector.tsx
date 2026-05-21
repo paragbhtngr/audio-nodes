@@ -1,6 +1,58 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../../state/store';
 import type { SoundNodeData, MasterNodeData, GroupNodeData } from '../../types';
+
+const EMOJI_CATEGORIES: Record<string, string[]> = {
+  'Music':   ['🎵','🎶','🎸','🎹','🎺','🥁','🎻','🎷','🪗','🪘','🔔','📯'],
+  'Nature':  ['🌧️','⛈️','🌊','🌬️','🌙','⭐','🌲','🌫️','🔥','🌋','❄️','🌑'],
+  'Fantasy': ['🐉','⚔️','🛡️','🧙','💀','👻','🦇','🗡️','🧟','🪄','🔮','💎'],
+  'Place':   ['🏰','🌿','🍺','🕯️','🗝️','🚪','🏕️','⛩️','🗺️','🌉','🏚️','⛺'],
+};
+
+function EmojiPicker({ value, onChange }: { value: string; onChange: (e: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={wrapRef} className="emoji-wrap">
+      <button className="emoji-trigger" onClick={() => setOpen((o) => !o)}>
+        {value || <span className="emoji-placeholder">Pick</span>}
+      </button>
+      {value && (
+        <button className="insp__clear" onClick={() => onChange('')} title="Clear icon">×</button>
+      )}
+      {open && (
+        <div className="emoji-popover">
+          {Object.entries(EMOJI_CATEGORIES).map(([cat, emojis]) => (
+            <div key={cat}>
+              <div className="emoji-cat-label">{cat}</div>
+              <div className="emoji-grid">
+                {emojis.map((em) => (
+                  <button
+                    key={em}
+                    className={`emoji-btn ${value === em ? 'emoji-btn--active' : ''}`}
+                    onClick={() => { onChange(em); setOpen(false); }}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SliderRow({
   label,
@@ -119,13 +171,7 @@ function GroupInspector({ id }: { id: string }) {
       <div className="insp__field">
         <div className="insp__row">
           <span className="insp__label">Icon</span>
-          <input
-            className="insp__emoji"
-            value={data.icon}
-            placeholder="emoji"
-            maxLength={2}
-            onChange={(e) => update(id, { icon: e.target.value })}
-          />
+          <EmojiPicker value={data.icon} onChange={(icon) => update(id, { icon })} />
         </div>
       </div>
 
