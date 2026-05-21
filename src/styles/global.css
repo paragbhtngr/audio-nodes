@@ -457,6 +457,49 @@ body,
 
 .insp__clear:hover { color: #f7768e; }
 
+/* React Flow dark theme overrides */
+.react-flow__minimap {
+  background: var(--panel) !important;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.react-flow__minimap-svg {
+  border-radius: 5px;
+}
+
+.react-flow__minimap-node {
+  fill: var(--border);
+  stroke: none;
+}
+
+.react-flow__controls {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  background: var(--panel) !important;
+  border-bottom: 1px solid var(--border) !important;
+  fill: var(--text) !important;
+  color: var(--text) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--bg) !important;
+}
+
+.react-flow__controls-button svg {
+  fill: var(--text);
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
 /* Emoji picker */
 .emoji-wrap {
   position: relative;
