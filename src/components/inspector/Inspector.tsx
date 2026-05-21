@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../../state/store';
-import type { SoundNodeData, MasterNodeData } from '../../types';
+import type { SoundNodeData, MasterNodeData, GroupNodeData } from '../../types';
 
 function SliderRow({
   label,
@@ -100,6 +100,27 @@ function HotkeyField({ nodeId }: { nodeId: string }) {
         {listening ? 'Press a key…' : (currentKey ?? 'Click to assign')}
       </button>
     </div>
+  );
+}
+
+function GroupInspector({ id }: { id: string }) {
+  const data = useStore((s) => {
+    const node = s.project.nodes.find((n) => n.id === id);
+    return node?.data as GroupNodeData | undefined;
+  });
+  const update = useStore((s) => s.updateNodeData);
+  if (!data) return null;
+  return (
+    <>
+      <div className="insp__section-title">Output</div>
+      <SliderRow
+        label="Volume"
+        value={data.volume}
+        min={0} max={1} step={0.01}
+        display={`${Math.round(data.volume * 100)}%`}
+        onChange={(v) => update(id, { volume: v })}
+      />
+    </>
   );
 }
 
@@ -225,6 +246,7 @@ export function Inspector() {
           </div>
           {node.type === 'sound' && <SoundInspector id={node.id} />}
           {node.type === 'master' && <MasterInspector id={node.id} />}
+          {node.type === 'group' && <GroupInspector id={node.id} />}
         </>
       )}
     </aside>

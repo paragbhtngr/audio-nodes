@@ -1,5 +1,5 @@
 import { useStore } from '../state/store';
-import type { Project, SoundNodeData } from '../types';
+import type { Project, SoundNodeData, GroupNodeData } from '../types';
 
 interface Track {
   gain: GainNode;
@@ -12,9 +12,11 @@ interface Track {
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private tracks = new Map<string, Track>();
+  private tracks = new Map<string, Track>();       // sound node id → track
+  private groupGains = new Map<string, GainNode>(); // group node id → gain
   private bufferCache = new Map<string, AudioBuffer>();
   private unsub: (() => void) | null = null;
+  private lastEdgeKey = '';
 
   private ctx_(): AudioContext {
     if (!this.ctx) {
@@ -37,30 +39,77 @@ class AudioEngine {
     this.ctx = null;
     this.masterGain = null;
     this.tracks.clear();
+    this.groupGains.clear();
+    this.lastEdgeKey = '';
+  }
+
+  private resolveTargetGain(nodeId: string, project: Project): GainNode | null {
+    const edge = project.edges.find((e) => e.source === nodeId);
+    if (!edge) return null;
+    const target = project.nodes.find((n) => n.id === edge.target);
+    if (!target) return null;
+    if (target.type === 'master') return this.masterGain;
+    if (target.type === 'group') return this.groupGains.get(target.id) ?? null;
+    return null;
+  }
+
+  private recomputeRouting(project: Project) {
+    for (const [nodeId, track] of this.tracks) {
+      const dest = this.resolveTargetGain(nodeId, project);
+      track.panner.disconnect();
+      if (dest) track.panner.connect(dest);
+    }
+    for (const [groupId, groupGain] of this.groupGains) {
+      const dest = this.resolveTargetGain(groupId, project);
+      groupGain.disconnect();
+      if (dest) groupGain.connect(dest);
+    }
   }
 
   private async reconcile(project: Project) {
     const ctx = this.ctx_();
 
+    // Master volume
     const masterNode = project.nodes.find((n) => n.type === 'master');
     if (masterNode && this.masterGain) {
       this.masterGain.gain.setTargetAtTime(
         (masterNode.data as { volume: number }).volume,
-        ctx.currentTime,
-        0.05
+        ctx.currentTime, 0.05
       );
     }
 
+    // Remove group gains for deleted group nodes
+    for (const [id] of this.groupGains) {
+      if (!project.nodes.find((n) => n.id === id)) {
+        this.groupGains.get(id)!.disconnect();
+        this.groupGains.delete(id);
+      }
+    }
+
+    // Create / update group gains
+    for (const node of project.nodes) {
+      if (node.type !== 'group') continue;
+      const data = node.data as GroupNodeData;
+      if (!this.groupGains.has(node.id)) {
+        const g = ctx.createGain();
+        g.gain.value = data.volume;
+        this.groupGains.set(node.id, g);
+      }
+      this.groupGains.get(node.id)!.gain.setTargetAtTime(data.volume, ctx.currentTime, 0.05);
+    }
+
+    // Remove tracks for deleted sound nodes
     for (const [id] of this.tracks) {
       if (!project.nodes.find((n) => n.id === id)) {
         this.stopTrack(id);
-        const track = this.tracks.get(id)!;
-        track.gain.disconnect();
-        track.panner.disconnect();
+        const t = this.tracks.get(id)!;
+        t.panner.disconnect();
+        t.gain.disconnect();
         this.tracks.delete(id);
       }
     }
 
+    // Create / update sound tracks
     for (const node of project.nodes) {
       if (node.type !== 'sound') continue;
       const data = node.data as SoundNodeData;
@@ -70,19 +119,18 @@ class AudioEngine {
         const panner = ctx.createStereoPanner();
         gain.gain.value = data.volume;
         panner.pan.value = data.pan;
-        // chain: source → gain → panner → masterGain
         gain.connect(panner);
-        panner.connect(this.masterGain!);
+        // panner output wired by recomputeRouting below
         this.tracks.set(node.id, { gain, panner, source: null, buffer: null, loadingForFileId: null });
       }
 
       const track = this.tracks.get(node.id)!;
       track.gain.gain.setTargetAtTime(data.volume, ctx.currentTime, 0.05);
-      // pan base value (randomization applied on start)
       if (!track.source) {
         track.panner.pan.setTargetAtTime(data.pan, ctx.currentTime, 0.05);
       }
 
+      // Buffer loading
       if (data.fileId && track.loadingForFileId !== data.fileId) {
         const cached = this.bufferCache.get(data.fileId);
         if (cached) {
@@ -96,18 +144,25 @@ class AudioEngine {
           }
         }
       }
-
       if (!data.fileId && track.source) {
         this.stopTrack(node.id);
         track.buffer = null;
         track.loadingForFileId = null;
       }
 
+      // Play / stop
       if (data.playing && track.buffer && !track.source) {
         this.startSource(node.id, data);
       } else if (!data.playing && track.source) {
         this.stopTrack(node.id, data.fadeOut);
       }
+    }
+
+    // Recompute audio routing when edges change
+    const edgeKey = project.edges.map((e) => `${e.source}>${e.target}`).sort().join('|');
+    if (edgeKey !== this.lastEdgeKey) {
+      this.lastEdgeKey = edgeKey;
+      this.recomputeRouting(project);
     }
   }
 
@@ -116,11 +171,9 @@ class AudioEngine {
       const arrayBuffer = await window.audioNodes.readFile(filePath);
       const buffer = await this.ctx_().decodeAudioData(arrayBuffer);
       this.bufferCache.set(fileId, buffer);
-
       const track = this.tracks.get(nodeId);
       if (!track || track.loadingForFileId !== fileId) return;
       track.buffer = buffer;
-
       const { project } = useStore.getState();
       const node = project.nodes.find((n) => n.id === nodeId);
       if (node && (node.data as SoundNodeData).playing && !track.source) {
@@ -139,13 +192,10 @@ class AudioEngine {
     const source = ctx.createBufferSource();
     source.buffer = track.buffer;
     source.loop = data.loop;
-
-    // pitch randomization
     source.playbackRate.value = data.pitchMin === data.pitchMax
       ? data.pitchMin
       : data.pitchMin + Math.random() * (data.pitchMax - data.pitchMin);
 
-    // pan randomization
     const pan = data.panRandom > 0
       ? data.pan + (Math.random() * 2 - 1) * data.panRandom
       : data.pan;
@@ -153,8 +203,6 @@ class AudioEngine {
 
     source.connect(track.gain);
 
-    // always cancel any leftover automation (e.g. from a previous fade-out)
-    // and set the gain explicitly before starting
     track.gain.gain.cancelScheduledValues(ctx.currentTime);
     if (data.fadeIn > 0) {
       track.gain.gain.setValueAtTime(0, ctx.currentTime);
@@ -173,10 +221,8 @@ class AudioEngine {
       };
     };
 
-    // AudioContext may be suspended until a user gesture; wait for it
     if (ctx.state === 'suspended') {
       ctx.resume().then(() => {
-        // verify the node is still supposed to be playing
         const node = useStore.getState().project.nodes.find((n) => n.id === nodeId);
         if (node && (node.data as SoundNodeData).playing && !track.source) launch();
       });

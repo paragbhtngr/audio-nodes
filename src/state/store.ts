@@ -40,6 +40,7 @@ interface StoreState {
   removeAudioFile: (id: string) => void;
 
   addSoundNode: (fileId: string | null, position: { x: number; y: number }) => string;
+  addGroupNode: (position: { x: number; y: number }) => string;
   updateNodeData: (id: string, patch: Partial<SoundNodeData> | Partial<AudioNodeData>) => void;
   updateNodePosition: (id: string, position: { x: number; y: number }) => void;
   removeNode: (id: string) => void;
@@ -84,6 +85,29 @@ export const useStore = create<StoreState>((set) => ({
       type: 'sound',
       position,
       data: { kind: 'sound', fileId, volume: 0.8, loop: true, playing: false, fadeIn: 0, fadeOut: 0, pan: 0, panRandom: 0, pitchMin: 1, pitchMax: 1 },
+    };
+    const autoEdge: ProjectEdge = {
+      id: `edge-${id}-${MASTER_NODE_ID}`,
+      source: id,
+      target: MASTER_NODE_ID,
+    };
+    set((s) => ({
+      project: {
+        ...s.project,
+        nodes: [...s.project.nodes, newNode],
+        edges: [...s.project.edges, autoEdge],
+      },
+    }));
+    return id;
+  },
+
+  addGroupNode: (position) => {
+    const id = `group-${makeId()}`;
+    const newNode: ProjectNode = {
+      id,
+      type: 'group',
+      position,
+      data: { kind: 'group', label: 'Group', volume: 1 },
     };
     const autoEdge: ProjectEdge = {
       id: `edge-${id}-${MASTER_NODE_ID}`,

@@ -18,11 +18,12 @@ import '@xyflow/react/dist/style.css';
 import { useStore } from '../state/store';
 import { MasterOutNode } from '../components/nodes/MasterOutNode';
 import { SoundNode } from '../components/nodes/SoundNode';
+import { GroupNode } from '../components/nodes/GroupNode';
 import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
 import type { AudioFile, AudioNodeData, SoundNodeData } from '../types';
 
-const nodeTypes = { sound: SoundNode, master: MasterOutNode };
+const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode };
 
 function toRFNode(n: { id: string; type: string; position: { x: number; y: number }; data: AudioNodeData }): Node {
   return { id: n.id, type: n.type, position: n.position, data: n.data as unknown as Record<string, unknown> };
@@ -55,7 +56,7 @@ async function deserializeProject(json: string, projectPath: string): Promise<ob
 
 function Canvas() {
   const project = useStore((s) => s.project);
-  const { addSoundNode, addAudioFile, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
+  const { addSoundNode, addGroupNode, addAudioFile, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
   const { screenToFlowPosition } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(project.nodes.map(toRFNode));
@@ -157,8 +158,20 @@ function Canvas() {
     [addAudioFile, spawnNode, screenToFlowPosition, audioExts]
   );
 
+  const addGroup = useCallback(() => {
+    const id = addGroupNode({ x: 300, y: 200 });
+    const newNode = toRFNode(useStore.getState().project.nodes.find((n) => n.id === id)!);
+    const autoEdge = toRFEdge({ id: `edge-${id}-master-out`, source: id, target: 'master-out' });
+    setNodes((nds) => [...nds, newNode]);
+    setEdges((eds) => [...eds, autoEdge]);
+  }, [addGroupNode, setNodes, setEdges]);
+
   return (
-    <div className="canvas" onDragOver={onDragOver} onDrop={onDrop}>
+    <div className="canvas-wrapper">
+      <div className="canvas-toolbar">
+        <button className="an-btn" onClick={addGroup}>+ Add Group</button>
+      </div>
+      <div className="canvas" onDragOver={onDragOver} onDrop={onDrop}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -175,6 +188,7 @@ function Canvas() {
         <Controls />
       </ReactFlow>
       <HotkeyHUD />
+    </div>
     </div>
   );
 }

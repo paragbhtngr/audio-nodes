@@ -24,11 +24,17 @@ export interface MasterNodeData {
   volume: number;
 }
 
-export type AudioNodeData = SoundNodeData | MasterNodeData;
+export interface GroupNodeData {
+  kind: 'group';
+  label: string;
+  volume: number;
+}
+
+export type AudioNodeData = SoundNodeData | MasterNodeData | GroupNodeData;
 
 export interface ProjectNode {
   id: string;
-  type: 'sound' | 'master';
+  type: 'sound' | 'master' | 'group';
   position: { x: number; y: number };
   data: AudioNodeData;
 }
