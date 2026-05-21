@@ -193,6 +193,55 @@ body,
   border-color: var(--accent);
 }
 
+/* Effect node */
+.an-node--effect {
+  border-color: #2ac3de;
+  min-width: 170px;
+}
+
+.an-node--effect .an-node__header {
+  color: #2ac3de;
+}
+
+/* Orphaned node indicator */
+.node-orphaned .an-node {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+/* Library item duration badge */
+.library-item__dur {
+  margin-left: 5px;
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+/* Sidebar section header row */
+.sidebar__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.sidebar__section-header h2 {
+  margin: 0;
+}
+
+/* Scenes panel */
+.scenes__fade-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.scenes__fade-row .insp__slider {
+  flex: 1;
+}
+
 .an-node--pool {
   border-color: #e0af68;
   min-width: 180px;

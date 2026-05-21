@@ -20,15 +20,36 @@ import { MasterOutNode } from '../components/nodes/MasterOutNode';
 import { SoundNode } from '../components/nodes/SoundNode';
 import { GroupNode } from '../components/nodes/GroupNode';
 import { RandomPoolNode } from '../components/nodes/RandomPoolNode';
+import { EffectNode } from '../components/nodes/EffectNode';
 import { usePrefabStore } from '../state/prefabStore';
+import { useRecentStore } from '../state/recentStore';
+import { audioEngine } from '../audio/engine';
 import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
-import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData } from '../types';
+import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData, EffectType, Scene } from '../types';
 
-const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode, randomPool: RandomPoolNode };
+const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode, randomPool: RandomPoolNode, effect: EffectNode };
 
-function toRFNode(n: { id: string; type: string; position: { x: number; y: number }; data: AudioNodeData }, hidden = false): Node {
-  return { id: n.id, type: n.type, position: n.position, data: n.data as unknown as Record<string, unknown>, hidden };
+function formatDuration(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return m > 0 ? `${m}:${sec.toString().padStart(2, '0')}` : `${sec}s`;
+}
+
+function toRFNode(n: { id: string; type: string; position: { x: number; y: number }; data: AudioNodeData }, hidden = false, orphaned = false): Node {
+  return { id: n.id, type: n.type, position: n.position, data: n.data as unknown as Record<string, unknown>, hidden, className: orphaned ? 'node-orphaned' : '' };
+}
+
+function computeOrphanedIds(project: { nodes: { id: string; type: string }[]; edges: { source: string; target: string }[] }): Set<string> {
+  const reachable = new Set(project.nodes.filter((n) => n.type === 'master').map((n) => n.id));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const e of project.edges) {
+      if (reachable.has(e.target) && !reachable.has(e.source)) { reachable.add(e.source); changed = true; }
+    }
+  }
+  return new Set(project.nodes.filter((n) => n.type !== 'master' && !reachable.has(n.id)).map((n) => n.id));
 }
 
 function toRFEdge(e: { id: string; source: string; target: string }, hidden = false): Edge {
@@ -69,18 +90,20 @@ async function deserializeProject(json: string, projectPath: string): Promise<ob
 
 function Canvas() {
   const project = useStore((s) => s.project);
-  const { addSoundNode, addGroupNode, addRandomPoolNode, addAudioFile, instantiatePrefab, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
+  const { addSoundNode, addGroupNode, addRandomPoolNode, addEffectNode, addAudioFile, instantiatePrefab, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
   const { screenToFlowPosition } = useReactFlow();
 
   const hiddenIds = collapsedHiddenIds(project);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(project.nodes.map((n) => toRFNode(n, hiddenIds.has(n.id))));
+  const orphanedIds = computeOrphanedIds(project);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(project.nodes.map((n) => toRFNode(n, hiddenIds.has(n.id), orphanedIds.has(n.id))));
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(project.edges.map((e) => toRFEdge(e, hiddenIds.has(e.source))));
 
   const prevProjectRef = useRef(project);
   useEffect(() => {
     if (prevProjectRef.current !== project) {
       const hids = collapsedHiddenIds(project);
-      setNodes(project.nodes.map((n) => toRFNode(n, hids.has(n.id))));
+      const orphs = computeOrphanedIds(project);
+      setNodes(project.nodes.map((n) => toRFNode(n, hids.has(n.id), orphs.has(n.id))));
       setEdges(project.edges.map((e) => toRFEdge(e, hids.has(e.source))));
       prevProjectRef.current = project;
     }
@@ -89,11 +112,12 @@ function Canvas() {
   // keep RF node data in sync when audio state changes
   useEffect(() => {
     const hids = collapsedHiddenIds(project);
+    const orphs = computeOrphanedIds(project);
     setNodes((rn) =>
       rn.map((rfNode) => {
         const stored = project.nodes.find((n) => n.id === rfNode.id);
         return stored
-          ? { ...rfNode, data: stored.data as unknown as Record<string, unknown>, hidden: hids.has(rfNode.id) }
+          ? { ...rfNode, data: stored.data as unknown as Record<string, unknown>, hidden: hids.has(rfNode.id), className: orphs.has(rfNode.id) ? 'node-orphaned' : '' }
           : rfNode;
       })
     );
@@ -209,11 +233,23 @@ function Canvas() {
     addNodeToCanvas(id);
   }, [addRandomPoolNode, addNodeToCanvas]);
 
+  const addEffect = useCallback((effectType: EffectType) => {
+    const id = addEffectNode(effectType, { x: 400, y: 200 });
+    addNodeToCanvas(id);
+  }, [addEffectNode, addNodeToCanvas]);
+
   return (
     <div className="canvas-wrapper">
       <div className="canvas-toolbar">
         <button className="an-btn" onClick={addGroup}>+ Group</button>
         <button className="an-btn" onClick={addPool}>+ Random Pool</button>
+        <select className="an-btn" style={{ cursor: 'pointer' }}
+          value="" onChange={(e) => { if (e.target.value) { addEffect(e.target.value as EffectType); e.target.value = ''; } }}>
+          <option value="">+ Effect…</option>
+          <option value="reverb">Reverb</option>
+          <option value="lowpass">Low Pass</option>
+          <option value="highpass">High Pass</option>
+        </select>
       </div>
       <div className="canvas">
       <ReactFlow
@@ -242,6 +278,7 @@ function Canvas() {
 function LibraryItem({ file }: { file: AudioFile }) {
   const renameAudioFile = useStore((s) => s.renameAudioFile);
   const removeAudioFile = useStore((s) => s.removeAudioFile);
+  const isMissing = useStore((s) => s.missingFileIds.has(file.id));
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(file.name);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -282,10 +319,12 @@ function LibraryItem({ file }: { file: AudioFile }) {
       ) : (
         <span
           className="library-item__name"
-          title="Click to rename"
+          title={isMissing ? 'File not found' : 'Click to rename'}
           onClick={() => { setDraft(file.name); setEditing(true); }}
+          style={isMissing ? { color: '#f7768e' } : undefined}
         >
-          {file.name}
+          {isMissing && '⚠ '}{file.name}
+          {file.duration != null && <span className="library-item__dur">{formatDuration(file.duration)}</span>}
         </span>
       )}
       <button
@@ -297,6 +336,86 @@ function LibraryItem({ file }: { file: AudioFile }) {
       </button>
     </li>
   );
+}
+
+function ScenesPanel() {
+  const scenes = useStore((s) => s.project.scenes);
+  const addScene = useStore((s) => s.addScene);
+  const deleteScene = useStore((s) => s.deleteScene);
+  const renameScene = useStore((s) => s.renameScene);
+  const [crossfadeDur, setCrossfadeDur] = useState(2);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+
+  if (scenes.length === 0 && true) {
+    return (
+      <div className="sidebar__section">
+        <div className="sidebar__section-header">
+          <h2>Scenes</h2>
+          <button className="an-btn" onClick={() => addScene(`Scene ${scenes.length + 1}`)}>+</button>
+        </div>
+        <p className="hint">Capture group states to recall later.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sidebar__section">
+      <div className="sidebar__section-header">
+        <h2>Scenes</h2>
+        <button className="an-btn" onClick={() => addScene(`Scene ${scenes.length + 1}`)}>+</button>
+      </div>
+      <div className="scenes__fade-row">
+        <span className="an-node__label">Fade</span>
+        <input type="range" className="insp__slider" min={0.5} max={10} step={0.5}
+          value={crossfadeDur} onChange={(e) => setCrossfadeDur(parseFloat(e.target.value))} />
+        <span className="an-node__value">{crossfadeDur}s</span>
+      </div>
+      <ul className="library-list">
+        {scenes.map((sc: Scene) => (
+          <li key={sc.id} className="library-item">
+            {editingId === sc.id ? (
+              <input
+                className="library-item__rename"
+                value={draft}
+                autoFocus
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={() => { renameScene(sc.id, draft || sc.name); setEditingId(null); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { renameScene(sc.id, draft || sc.name); setEditingId(null); }
+                  if (e.key === 'Escape') setEditingId(null);
+                  e.stopPropagation();
+                }}
+              />
+            ) : (
+              <span className="library-item__name" onDoubleClick={() => { setDraft(sc.name); setEditingId(sc.id); }}>
+                {sc.name}
+              </span>
+            )}
+            <button className="an-btn an-btn--play" style={{ padding: '2px 6px', fontSize: 11 }}
+              onClick={() => audioEngine.recallScene(sc, crossfadeDur)}>▶</button>
+            <button className="library-item__remove" onClick={() => deleteScene(sc.id)}>×</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function MissingFileChecker() {
+  const library = useStore((s) => s.project.library);
+  const setMissingFileIds = useStore((s) => s.setMissingFileIds);
+
+  useEffect(() => {
+    if (!window.audioNodes || library.length === 0) { setMissingFileIds(new Set()); return; }
+    const paths = library.map((f) => f.path);
+    window.audioNodes.checkExists(paths).then((missingPaths) => {
+      const missing = new Set(library.filter((f) => missingPaths.includes(f.path)).map((f) => f.id));
+      setMissingFileIds(missing);
+    });
+  }, [library, setMissingFileIds]);
+
+  return null;
 }
 
 function PrefabsPanel() {
@@ -360,6 +479,7 @@ function LibraryPanel() {
         {library.map((file) => <LibraryItem key={file.id} file={file} />)}
       </ul>
       <PrefabsPanel />
+      <ScenesPanel />
     </aside>
   );
 }
@@ -401,34 +521,51 @@ function MenuHandler() {
   const { newProject, setProject, setFilePath } = useStore((s) => s);
   const filePath = useStore((s) => s.filePath);
   const project = useStore((s) => s.project);
+  const addRecent = useRecentStore((s) => s.add);
+  const clearRecent = useRecentStore((s) => s.clear);
+  const recentPaths = useRecentStore((s) => s.paths);
+
+  // Keep native File menu in sync with recent list
+  useEffect(() => {
+    if (window.audioNodes) window.audioNodes.setRecentProjects(recentPaths);
+  }, [recentPaths]);
+
+  const openProject = async (path: string) => {
+    const json = await window.audioNodes.loadProject(path);
+    const parsed = await deserializeProject(json, path);
+    setProject(parsed as Parameters<typeof setProject>[0]);
+    setFilePath(path);
+    addRecent(path);
+  };
 
   useEffect(() => {
     if (!window.audioNodes) return;
     return window.audioNodes.onMenuAction(async (action) => {
       if (action === 'new') {
         newProject();
-      } else if (action === 'open') {
-        const path = await window.audioNodes.showOpenDialog();
+      } else if (action === 'open' || action.startsWith('open:')) {
+        const path = action.startsWith('open:') ? action.slice(5) : await window.audioNodes.showOpenDialog();
         if (!path) return;
-        const json = await window.audioNodes.loadProject(path);
-        const parsed = await deserializeProject(json, path);
-        setProject(parsed as Parameters<typeof setProject>[0]);
-        setFilePath(path);
+        await openProject(path);
       } else if (action === 'save') {
         const savePath = filePath ?? (await window.audioNodes.showSaveDialog(project.name));
         if (!savePath) return;
         const json = await serializeProject(project, savePath);
         await window.audioNodes.saveProject(savePath, json);
         setFilePath(savePath);
+        addRecent(savePath);
       } else if (action === 'saveAs') {
         const savePath = await window.audioNodes.showSaveDialog(project.name);
         if (!savePath) return;
         const json = await serializeProject(project, savePath);
         await window.audioNodes.saveProject(savePath, json);
         setFilePath(savePath);
+        addRecent(savePath);
+      } else if (action === 'clearRecent') {
+        clearRecent();
       }
     });
-  }, [newProject, setProject, setFilePath, filePath, project]);
+  }, [newProject, setProject, setFilePath, filePath, project, addRecent, clearRecent, openProject]);
 
   return null;
 }
@@ -438,6 +575,7 @@ export function EditView() {
     <div className="edit-view">
       <MenuHandler />
       <HotkeyHandler />
+      <MissingFileChecker />
       <LibraryPanel />
       <ReactFlowProvider>
         <Canvas />

@@ -32,6 +32,12 @@ contextBridge.exposeInMainWorld('audioNodes', {
   absolutizePath: (projectPath: string, relPath: string): Promise<string> =>
     ipcRenderer.invoke('path:absolutize', projectPath, relPath),
 
+  checkExists: (paths: string[]): Promise<string[]> =>
+    ipcRenderer.invoke('fs:checkExists', paths),
+
+  setRecentProjects: (paths: string[]): Promise<void> =>
+    ipcRenderer.invoke('menu:setRecentProjects', paths),
+
   registerHotkeys: (hotkeys: Record<string, string>): Promise<void> =>
     ipcRenderer.invoke('hotkeys:register', hotkeys),
 

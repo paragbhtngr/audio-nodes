@@ -17,6 +17,17 @@ function sendMenuAction(action: string) {
 
 function buildMenu() {
   const isMac = process.platform === 'darwin';
+  const recentSubmenu: Electron.MenuItemConstructorOptions[] = currentRecentPaths.length > 0
+    ? [
+        ...currentRecentPaths.map((p) => ({
+          label: path.basename(p),
+          click: () => sendMenuAction(`open:${p}`),
+        })),
+        { type: 'separator' as const },
+        { label: 'Clear Recent', click: () => sendMenuAction('clearRecent') },
+      ]
+    : [{ label: 'No Recent Projects', enabled: false }];
+
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: 'appMenu' as const }] : []),
     {
@@ -24,6 +35,7 @@ function buildMenu() {
       submenu: [
         { label: 'New Project', accelerator: 'CmdOrCtrl+N', click: () => sendMenuAction('new') },
         { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: () => sendMenuAction('open') },
+        { label: 'Open Recent', submenu: recentSubmenu },
         { type: 'separator' as const },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuAction('save') },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenuAction('saveAs') },
@@ -129,6 +141,21 @@ ipcMain.handle('project:save', async (_, filePath: string, json: string) => {
 
 ipcMain.handle('project:load', async (_, filePath: string) => {
   return fs.readFile(filePath, 'utf8');
+});
+
+ipcMain.handle('fs:checkExists', async (_evt, paths: string[]) => {
+  const missing: string[] = [];
+  await Promise.all(paths.map(async (p) => {
+    try { await fs.access(p); } catch { missing.push(p); }
+  }));
+  return missing;
+});
+
+let currentRecentPaths: string[] = [];
+
+ipcMain.handle('menu:setRecentProjects', (_evt, paths: string[]) => {
+  currentRecentPaths = paths;
+  Menu.setApplicationMenu(buildMenu());
 });
 
 ipcMain.handle('path:relativize', (_evt, projectPath: string, filePath: string) =>

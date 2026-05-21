@@ -18,6 +18,9 @@ export interface AudioNodesAPI {
   saveProject: (filePath: string, json: string) => Promise<void>;
   loadProject: (filePath: string) => Promise<string>;
 
+  checkExists: (paths: string[]) => Promise<string[]>;
+  setRecentProjects: (paths: string[]) => Promise<void>;
+
   // Path utilities (resolved in main process)
   relativizePath: (projectPath: string, filePath: string) => Promise<string>;
   absolutizePath: (projectPath: string, relPath: string) => Promise<string>;

@@ -53,11 +53,28 @@ export interface RandomPoolNodeData {
   duckRelease: number;
 }
 
-export type AudioNodeData = SoundNodeData | MasterNodeData | GroupNodeData | RandomPoolNodeData;
+export type EffectType = 'reverb' | 'lowpass' | 'highpass';
+
+export interface EffectNodeData {
+  kind: 'effect';
+  effectType: EffectType;
+  wet: number;
+  decay: number;
+  frequency: number;
+  q: number;
+}
+
+export interface Scene {
+  id: string;
+  name: string;
+  groupStates: Array<{ groupId: string; volume: number; active: boolean }>;
+}
+
+export type AudioNodeData = SoundNodeData | MasterNodeData | GroupNodeData | RandomPoolNodeData | EffectNodeData;
 
 export interface ProjectNode {
   id: string;
-  type: 'sound' | 'master' | 'group' | 'randomPool';
+  type: 'sound' | 'master' | 'group' | 'randomPool' | 'effect';
   position: { x: number; y: number };
   data: AudioNodeData;
 }
@@ -87,4 +104,5 @@ export interface Project {
   nodes: ProjectNode[];
   edges: ProjectEdge[];
   hotkeys: HotkeyMap;
+  scenes: Scene[];
 }

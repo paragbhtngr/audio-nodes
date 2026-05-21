@@ -8,6 +8,7 @@ export function SoundNode({ id }: NodeProps) {
     return node?.data as SoundNodeData | undefined;
   });
   const library = useStore((s) => s.project.library);
+  const isMissing = useStore((s) => data?.fileId != null && s.missingFileIds.has(data.fileId));
   const updateNodeData = useStore((s) => s.updateNodeData);
   const removeNode = useStore((s) => s.removeNode);
 
@@ -22,6 +23,7 @@ export function SoundNode({ id }: NodeProps) {
   return (
     <div className="an-node an-node--sound">
       <div className="an-node__header">
+        {isMissing && <span title="File not found" style={{ color: '#f7768e', marginRight: 4 }}>⚠</span>}
         {file ? file.name : <span className="an-node__muted">No file</span>}
         <button
           className="an-node__delete"

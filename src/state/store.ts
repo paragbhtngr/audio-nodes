@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
   Project, ProjectNode, ProjectEdge, AudioFile, AudioNodeData,
-  SoundNodeData, Prefab,
+  SoundNodeData, EffectType, Scene, Prefab,
 } from '../types';
 
 export const MASTER_NODE_ID = 'master-out';
@@ -22,6 +22,7 @@ function defaultProject(): Project {
     ],
     edges: [],
     hotkeys: {},
+    scenes: [],
   };
 }
 
@@ -46,7 +47,17 @@ interface StoreState {
   addSoundNode: (fileId: string | null, position: { x: number; y: number }) => string;
   addGroupNode: (position: { x: number; y: number }) => string;
   addRandomPoolNode: (position: { x: number; y: number }) => string;
+  addEffectNode: (effectType: EffectType, position: { x: number; y: number }) => string;
   instantiatePrefab: (prefab: Prefab, position: { x: number; y: number }) => void;
+
+  updateLibraryFileDuration: (fileId: string, duration: number) => void;
+
+  addScene: (name: string) => void;
+  deleteScene: (id: string) => void;
+  renameScene: (id: string, name: string) => void;
+
+  missingFileIds: Set<string>;
+  setMissingFileIds: (ids: Set<string>) => void;
 
   updateNodeData: (id: string, patch: Partial<SoundNodeData> | Partial<AudioNodeData>) => void;
   updateNodePosition: (id: string, position: { x: number; y: number }) => void;
@@ -107,6 +118,24 @@ export const useStore = create<StoreState>()(
           type: 'group',
           position,
           data: { kind: 'group', label: 'Group', icon: '', color: '#bb9af7', volume: 1, collapsed: false },
+        };
+        const autoEdge: ProjectEdge = { id: `edge-${id}-${MASTER_NODE_ID}`, source: id, target: MASTER_NODE_ID };
+        set((s) => ({ project: { ...s.project, nodes: [...s.project.nodes, newNode], edges: [...s.project.edges, autoEdge] } }));
+        return id;
+      },
+
+      addEffectNode: (effectType, position) => {
+        const id = `effect-${makeId()}`;
+        const defaults: Record<EffectType, object> = {
+          reverb:   { wet: 0.3, decay: 2, frequency: 800, q: 1 },
+          lowpass:  { wet: 1,   decay: 2, frequency: 800, q: 1 },
+          highpass: { wet: 1,   decay: 2, frequency: 400, q: 1 },
+        };
+        const newNode: ProjectNode = {
+          id,
+          type: 'effect',
+          position,
+          data: { kind: 'effect', effectType, ...defaults[effectType] } as AudioNodeData,
         };
         const autoEdge: ProjectEdge = { id: `edge-${id}-${MASTER_NODE_ID}`, source: id, target: MASTER_NODE_ID };
         set((s) => ({ project: { ...s.project, nodes: [...s.project.nodes, newNode], edges: [...s.project.edges, autoEdge] } }));
@@ -210,6 +239,37 @@ export const useStore = create<StoreState>()(
         set((s) => ({
           project: { ...s.project, edges: s.project.edges.filter((e) => e.id !== id) },
         })),
+
+      updateLibraryFileDuration: (fileId, duration) =>
+        set((s) => ({
+          project: { ...s.project, library: s.project.library.map((f) => f.id === fileId ? { ...f, duration } : f) },
+        })),
+
+      addScene: (name) =>
+        set((s) => {
+          const project = s.project;
+          const groupStates = project.nodes
+            .filter((n) => n.type === 'group')
+            .map((n) => {
+              const memberIds = project.edges.filter((e) => e.target === n.id).map((e) => e.source);
+              const active = memberIds.some((id) => {
+                const m = project.nodes.find((x) => x.id === id);
+                return m && (m.data as { playing?: boolean }).playing;
+              });
+              return { groupId: n.id, volume: (n.data as { volume: number }).volume, active };
+            });
+          const scene: Scene = { id: `scene-${makeId()}`, name, groupStates };
+          return { project: { ...project, scenes: [...project.scenes, scene] } };
+        }),
+
+      deleteScene: (id) =>
+        set((s) => ({ project: { ...s.project, scenes: s.project.scenes.filter((sc) => sc.id !== id) } })),
+
+      renameScene: (id, name) =>
+        set((s) => ({ project: { ...s.project, scenes: s.project.scenes.map((sc) => sc.id === id ? { ...sc, name } : sc) } })),
+
+      missingFileIds: new Set<string>(),
+      setMissingFileIds: (ids) => set({ missingFileIds: ids }),
 
       setHotkey: (key, nodeId) =>
         set((s) => ({

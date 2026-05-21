@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../../state/store';
 import { usePrefabStore } from '../../state/prefabStore';
 import { audioEngine } from '../../audio/engine';
-import type { SoundNodeData, MasterNodeData, GroupNodeData, RandomPoolNodeData } from '../../types';
+import type { SoundNodeData, MasterNodeData, GroupNodeData, RandomPoolNodeData, EffectNodeData } from '../../types';
 
 const EMOJI_CATEGORIES: Record<string, string[]> = {
   'Music':   ['🎵','🎶','🎸','🎹','🎺','🥁','🎻','🎷','🪗','🪘','🔔','📯'],
@@ -490,6 +490,44 @@ function RandomPoolInspector({ id }: { id: string }) {
   );
 }
 
+function EffectInspector({ id }: { id: string }) {
+  const data = useStore((s) => s.project.nodes.find((n) => n.id === id)?.data as EffectNodeData | undefined);
+  const update = useStore((s) => s.updateNodeData);
+  if (!data) return null;
+  const u = (patch: Partial<EffectNodeData>) => update(id, patch);
+  const logFreq = Math.log10(data.frequency);
+
+  return (
+    <>
+      {data.effectType === 'reverb' ? (
+        <>
+          <div className="insp__section-title">Reverb</div>
+          <SliderRow label="Wet" value={data.wet} min={0} max={1} step={0.01}
+            display={`${Math.round(data.wet * 100)}%`} onChange={(v) => u({ wet: v })} />
+          <SliderRow label="Decay" value={data.decay} min={0.1} max={5} step={0.1}
+            display={`${data.decay.toFixed(1)}s`} onChange={(v) => u({ decay: v })} />
+        </>
+      ) : (
+        <>
+          <div className="insp__section-title">{data.effectType === 'lowpass' ? 'Low Pass Filter' : 'High Pass Filter'}</div>
+          <div className="insp__field">
+            <div className="insp__row">
+              <span className="insp__label">Cutoff</span>
+              <span className="insp__value">{Math.round(data.frequency)} Hz</span>
+            </div>
+            <input type="range" className="insp__slider"
+              min={Math.log10(20)} max={Math.log10(20000)} step={0.01}
+              value={logFreq}
+              onChange={(e) => u({ frequency: Math.round(Math.pow(10, parseFloat(e.target.value))) })} />
+          </div>
+          <SliderRow label="Resonance (Q)" value={data.q} min={0.1} max={10} step={0.1}
+            display={data.q.toFixed(1)} onChange={(v) => u({ q: v })} />
+        </>
+      )}
+    </>
+  );
+}
+
 function MasterInspector({ id }: { id: string }) {
   const data = useStore((s) => {
     const node = s.project.nodes.find((n) => n.id === id);
@@ -533,6 +571,7 @@ export function Inspector() {
           {node.type === 'master' && <MasterInspector id={node.id} />}
           {node.type === 'group' && <GroupInspector id={node.id} />}
           {node.type === 'randomPool' && <RandomPoolInspector id={node.id} />}
+          {node.type === 'effect' && <EffectInspector id={node.id} />}
         </>
       )}
     </aside>
