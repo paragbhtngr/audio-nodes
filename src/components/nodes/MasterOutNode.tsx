@@ -22,7 +22,7 @@ export function MasterOutNode({ id }: NodeProps) {
         </div>
         <input
           type="range"
-          className="an-node__slider"
+          className="an-node__slider nodrag"
           min={0}
           max={1}
           step={0.01}
