@@ -33,13 +33,37 @@ export interface GroupNodeData {
   collapsed: boolean;
 }
 
-export type AudioNodeData = SoundNodeData | MasterNodeData | GroupNodeData;
+export interface RandomPoolNodeData {
+  kind: 'randomPool';
+  fileIds: string[];
+  volume: number;
+  loop: boolean;
+  playing: boolean;
+  fadeIn: number;
+  fadeOut: number;
+  pan: number;
+  panRandom: number;
+  pitchMin: number;
+  pitchMax: number;
+}
+
+export type AudioNodeData = SoundNodeData | MasterNodeData | GroupNodeData | RandomPoolNodeData;
 
 export interface ProjectNode {
   id: string;
-  type: 'sound' | 'master' | 'group';
+  type: 'sound' | 'master' | 'group' | 'randomPool';
   position: { x: number; y: number };
   data: AudioNodeData;
+}
+
+export interface Prefab {
+  id: string;
+  groupData: GroupNodeData;
+  members: Array<{
+    data: SoundNodeData | RandomPoolNodeData;
+    relativePosition: { x: number; y: number };
+  }>;
+  library: AudioFile[];
 }
 
 export interface ProjectEdge {

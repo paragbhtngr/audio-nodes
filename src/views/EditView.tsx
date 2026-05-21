@@ -19,11 +19,13 @@ import { useStore } from '../state/store';
 import { MasterOutNode } from '../components/nodes/MasterOutNode';
 import { SoundNode } from '../components/nodes/SoundNode';
 import { GroupNode } from '../components/nodes/GroupNode';
+import { RandomPoolNode } from '../components/nodes/RandomPoolNode';
+import { usePrefabStore } from '../state/prefabStore';
 import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
 import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData } from '../types';
 
-const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode };
+const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode, randomPool: RandomPoolNode };
 
 function toRFNode(n: { id: string; type: string; position: { x: number; y: number }; data: AudioNodeData }, hidden = false): Node {
   return { id: n.id, type: n.type, position: n.position, data: n.data as unknown as Record<string, unknown>, hidden };
@@ -67,7 +69,7 @@ async function deserializeProject(json: string, projectPath: string): Promise<ob
 
 function Canvas() {
   const project = useStore((s) => s.project);
-  const { addSoundNode, addGroupNode, addAudioFile, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
+  const { addSoundNode, addGroupNode, addRandomPoolNode, addAudioFile, instantiatePrefab, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
   const { screenToFlowPosition } = useReactFlow();
 
   const hiddenIds = collapsedHiddenIds(project);
@@ -153,6 +155,15 @@ function Canvas() {
       e.preventDefault();
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
 
+      // Prefab drop — store handles all node/edge/library creation atomically;
+      // the project useEffect will sync RF state on the next render
+      const prefabId = e.dataTransfer.getData('prefabId');
+      if (prefabId) {
+        const prefab = usePrefabStore.getState().prefabs.find((p) => p.id === prefabId);
+        if (prefab) instantiatePrefab(prefab, position);
+        return;
+      }
+
       // Files dragged from Finder / Explorer
       if (e.dataTransfer.files.length > 0) {
         Array.from(e.dataTransfer.files).forEach((file, i) => {
@@ -178,21 +189,31 @@ function Canvas() {
       const fileId = e.dataTransfer.getData('fileId') || null;
       spawnNode(fileId, position);
     },
-    [addAudioFile, spawnNode, screenToFlowPosition, audioExts]
+    [addAudioFile, spawnNode, instantiatePrefab, screenToFlowPosition, audioExts]
   );
+
+  const addNodeToCanvas = useCallback((id: string) => {
+    const node = useStore.getState().project.nodes.find((n) => n.id === id)!;
+    const edge = useStore.getState().project.edges.find((e) => e.source === id);
+    setNodes((nds) => [...nds, toRFNode(node)]);
+    if (edge) setEdges((eds) => [...eds, toRFEdge(edge)]);
+  }, [setNodes, setEdges]);
 
   const addGroup = useCallback(() => {
     const id = addGroupNode({ x: 300, y: 200 });
-    const newNode = toRFNode(useStore.getState().project.nodes.find((n) => n.id === id)!);
-    const autoEdge = toRFEdge({ id: `edge-${id}-master-out`, source: id, target: 'master-out' });
-    setNodes((nds) => [...nds, newNode]);
-    setEdges((eds) => [...eds, autoEdge]);
-  }, [addGroupNode, setNodes, setEdges]);
+    addNodeToCanvas(id);
+  }, [addGroupNode, addNodeToCanvas]);
+
+  const addPool = useCallback(() => {
+    const id = addRandomPoolNode({ x: 300, y: 200 });
+    addNodeToCanvas(id);
+  }, [addRandomPoolNode, addNodeToCanvas]);
 
   return (
     <div className="canvas-wrapper">
       <div className="canvas-toolbar">
-        <button className="an-btn" onClick={addGroup}>+ Add Group</button>
+        <button className="an-btn" onClick={addGroup}>+ Group</button>
+        <button className="an-btn" onClick={addPool}>+ Random Pool</button>
       </div>
       <div className="canvas">
       <ReactFlow
@@ -278,6 +299,36 @@ function LibraryItem({ file }: { file: AudioFile }) {
   );
 }
 
+function PrefabsPanel() {
+  const prefabs = usePrefabStore((s) => s.prefabs);
+  const deletePrefab = usePrefabStore((s) => s.deletePrefab);
+  if (prefabs.length === 0) return null;
+  return (
+    <div className="sidebar__section">
+      <h2>Prefabs</h2>
+      <ul className="library-list">
+        {prefabs.map((p) => (
+          <li
+            key={p.id}
+            className="library-item"
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData('prefabId', p.id);
+              e.dataTransfer.effectAllowed = 'copy';
+            }}
+          >
+            <span className="library-item__name">
+              {p.groupData.icon && <span style={{ marginRight: 4 }}>{p.groupData.icon}</span>}
+              {p.groupData.label}
+            </span>
+            <button className="library-item__remove" onClick={() => deletePrefab(p.id)} title="Delete prefab">×</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function LibraryPanel() {
   const library = useStore((s) => s.project.library);
   const addAudioFile = useStore((s) => s.addAudioFile);
@@ -308,6 +359,7 @@ function LibraryPanel() {
       <ul className="library-list">
         {library.map((file) => <LibraryItem key={file.id} file={file} />)}
       </ul>
+      <PrefabsPanel />
     </aside>
   );
 }
@@ -331,7 +383,7 @@ function HotkeyHandler() {
       const node = nodes.find((n) => n.id === nodeId);
       if (!node) return;
 
-      if (node.type === 'sound') {
+      if (node.type === 'sound' || node.type === 'randomPool') {
         updateNodeData(nodeId, { playing: !(node.data as SoundNodeData).playing });
       } else if (node.type === 'group') {
         const memberIds = new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source));
