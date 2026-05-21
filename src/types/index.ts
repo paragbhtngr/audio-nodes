@@ -13,6 +13,10 @@ export interface SoundNodeData {
   playing: boolean;
   fadeIn: number;
   fadeOut: number;
+  pan: number;
+  panRandom: number;
+  pitchMin: number;
+  pitchMax: number;
 }
 
 export interface MasterNodeData {

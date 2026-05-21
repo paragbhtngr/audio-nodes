@@ -18,6 +18,14 @@ export interface AudioNodesAPI {
   saveProject: (filePath: string, json: string) => Promise<void>;
   loadProject: (filePath: string) => Promise<string>;
 
+  // Path utilities (resolved in main process)
+  relativizePath: (projectPath: string, filePath: string) => Promise<string>;
+  absolutizePath: (projectPath: string, relPath: string) => Promise<string>;
+
+  // Hotkeys
+  registerHotkeys: (hotkeys: Record<string, string>) => Promise<void>;
+  onHotkeyTriggered: (cb: (key: string) => void) => () => void;
+
   // Menu events from main process
   onMenuAction: (cb: (action: string) => void) => () => void;
 }

@@ -26,9 +26,24 @@ contextBridge.exposeInMainWorld('audioNodes', {
   loadProject: (filePath: string): Promise<string> =>
     ipcRenderer.invoke('project:load', filePath),
 
+  relativizePath: (projectPath: string, filePath: string): Promise<string> =>
+    ipcRenderer.invoke('path:relativize', projectPath, filePath),
+
+  absolutizePath: (projectPath: string, relPath: string): Promise<string> =>
+    ipcRenderer.invoke('path:absolutize', projectPath, relPath),
+
+  registerHotkeys: (hotkeys: Record<string, string>): Promise<void> =>
+    ipcRenderer.invoke('hotkeys:register', hotkeys),
+
   onMenuAction: (cb: (action: string) => void) => {
     const handler = (_: Electron.IpcRendererEvent, action: string) => cb(action);
     ipcRenderer.on('menu:action', handler);
     return () => ipcRenderer.removeListener('menu:action', handler);
+  },
+
+  onHotkeyTriggered: (cb: (key: string) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, key: string) => cb(key);
+    ipcRenderer.on('hotkey:triggered', handler);
+    return () => ipcRenderer.removeListener('hotkey:triggered', handler);
   },
 });

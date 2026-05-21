@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, globalShortcut } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -131,6 +131,32 @@ ipcMain.handle('project:load', async (_, filePath: string) => {
   return fs.readFile(filePath, 'utf8');
 });
 
+ipcMain.handle('path:relativize', (_evt, projectPath: string, filePath: string) =>
+  path.relative(path.dirname(projectPath), filePath)
+);
+
+ipcMain.handle('path:absolutize', (_evt, projectPath: string, relPath: string) =>
+  path.resolve(path.dirname(projectPath), relPath)
+);
+
+const registeredHotkeys = new Set<string>();
+
+ipcMain.handle('hotkeys:register', (_evt, hotkeys: Record<string, string>) => {
+  for (const key of registeredHotkeys) globalShortcut.unregister(key);
+  registeredHotkeys.clear();
+  for (const key of Object.keys(hotkeys)) {
+    try {
+      const ok = globalShortcut.register(key, () => {
+        mainWindow?.webContents.send('hotkey:triggered', key);
+      });
+      if (ok) registeredHotkeys.add(key);
+      else console.warn('Could not register hotkey:', key);
+    } catch (e) {
+      console.warn('Invalid hotkey:', key, e);
+    }
+  }
+});
+
 app.whenReady().then(() => {
   Menu.setApplicationMenu(buildMenu());
   createWindow();
@@ -142,4 +168,8 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });

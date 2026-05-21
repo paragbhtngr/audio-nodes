@@ -36,6 +36,7 @@ interface StoreState {
   selectNode: (id: string | null) => void;
 
   addAudioFile: (file: AudioFile) => void;
+  renameAudioFile: (id: string, name: string) => void;
   removeAudioFile: (id: string) => void;
 
   addSoundNode: (fileId: string | null, position: { x: number; y: number }) => string;
@@ -45,6 +46,9 @@ interface StoreState {
 
   addEdge: (edge: Omit<ProjectEdge, 'id'>) => void;
   removeEdge: (id: string) => void;
+
+  setHotkey: (key: string, nodeId: string) => void;
+  removeHotkey: (key: string) => void;
 }
 
 export const useStore = create<StoreState>((set) => ({
@@ -60,6 +64,14 @@ export const useStore = create<StoreState>((set) => ({
   addAudioFile: (file) =>
     set((s) => ({ project: { ...s.project, library: [...s.project.library, file] } })),
 
+  renameAudioFile: (id, name) =>
+    set((s) => ({
+      project: {
+        ...s.project,
+        library: s.project.library.map((f) => (f.id === id ? { ...f, name } : f)),
+      },
+    })),
+
   removeAudioFile: (id) =>
     set((s) => ({
       project: { ...s.project, library: s.project.library.filter((f) => f.id !== id) },
@@ -71,7 +83,7 @@ export const useStore = create<StoreState>((set) => ({
       id,
       type: 'sound',
       position,
-      data: { kind: 'sound', fileId, volume: 0.8, loop: true, playing: false, fadeIn: 0, fadeOut: 0 },
+      data: { kind: 'sound', fileId, volume: 0.8, loop: true, playing: false, fadeIn: 0, fadeOut: 0, pan: 0, panRandom: 0, pitchMin: 1, pitchMax: 1 },
     };
     const autoEdge: ProjectEdge = {
       id: `edge-${id}-${MASTER_NODE_ID}`,
@@ -127,4 +139,15 @@ export const useStore = create<StoreState>((set) => ({
     set((s) => ({
       project: { ...s.project, edges: s.project.edges.filter((e) => e.id !== id) },
     })),
+
+  setHotkey: (key, nodeId) =>
+    set((s) => ({
+      project: { ...s.project, hotkeys: { ...s.project.hotkeys, [key]: nodeId } },
+    })),
+
+  removeHotkey: (key) =>
+    set((s) => {
+      const { [key]: _removed, ...rest } = s.project.hotkeys;
+      return { project: { ...s.project, hotkeys: rest } };
+    }),
 }));

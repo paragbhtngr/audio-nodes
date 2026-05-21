@@ -113,6 +113,22 @@ body,
   white-space: nowrap;
 }
 
+.library-item__name {
+  cursor: text;
+}
+
+.library-item__rename {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 1px 4px;
+  outline: none;
+}
+
 .library-item__remove {
   flex-shrink: 0;
   background: none;
@@ -259,6 +275,172 @@ body,
   color: var(--muted);
   cursor: pointer;
 }
+
+/* Inspector panel */
+.inspector {
+  width: 240px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  padding: 10px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.insp__header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--accent);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.insp__section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  margin-top: 10px;
+  margin-bottom: 2px;
+}
+
+.insp__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.insp__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.insp__label {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.insp__value {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.insp__slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.insp__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.insp__clear {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.insp__clear:hover { color: #f7768e; }
+
+.insp__hotkey-btn {
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.insp__hotkey-btn--listening {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Hotkey HUD */
+.hud {
+  position: absolute;
+  bottom: 48px;
+  right: 12px;
+  width: 240px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.hud__title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.hud__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.hud__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+}
+
+.hud__key {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--accent);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.hud__name {
+  flex: 1;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud__trigger {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.hud__trigger--active { color: #f7768e; }
+.hud__trigger:hover { color: var(--text); }
 
 .canvas {
   flex: 1;

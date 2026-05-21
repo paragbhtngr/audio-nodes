@@ -3,6 +3,7 @@ import type { Project, SoundNodeData } from '../types';
 
 interface Track {
   gain: GainNode;
+  panner: StereoPannerNode;
   source: AudioBufferSourceNode | null;
   buffer: AudioBuffer | null;
   loadingForFileId: string | null;
@@ -54,11 +55,12 @@ class AudioEngine {
       );
     }
 
-    // remove tracks for nodes no longer in the project
     for (const [id] of this.tracks) {
       if (!project.nodes.find((n) => n.id === id)) {
         this.stopTrack(id);
-        this.tracks.get(id)?.gain.disconnect();
+        const track = this.tracks.get(id)!;
+        track.gain.disconnect();
+        track.panner.disconnect();
         this.tracks.delete(id);
       }
     }
@@ -69,13 +71,21 @@ class AudioEngine {
 
       if (!this.tracks.has(node.id)) {
         const gain = ctx.createGain();
+        const panner = ctx.createStereoPanner();
         gain.gain.value = data.volume;
-        gain.connect(this.masterGain!);
-        this.tracks.set(node.id, { gain, source: null, buffer: null, loadingForFileId: null });
+        panner.pan.value = data.pan;
+        // chain: source → gain → panner → masterGain
+        gain.connect(panner);
+        panner.connect(this.masterGain!);
+        this.tracks.set(node.id, { gain, panner, source: null, buffer: null, loadingForFileId: null });
       }
 
       const track = this.tracks.get(node.id)!;
       track.gain.gain.setTargetAtTime(data.volume, ctx.currentTime, 0.05);
+      // pan base value (randomization applied on start)
+      if (!track.source) {
+        track.panner.pan.setTargetAtTime(data.pan, ctx.currentTime, 0.05);
+      }
 
       if (data.fileId && track.loadingForFileId !== data.fileId) {
         const cached = this.bufferCache.get(data.fileId);
@@ -98,9 +108,9 @@ class AudioEngine {
       }
 
       if (data.playing && track.buffer && !track.source) {
-        this.startSource(node.id, data.loop);
+        this.startSource(node.id, data);
       } else if (!data.playing && track.source) {
-        this.stopTrack(node.id);
+        this.stopTrack(node.id, data.fadeOut);
       }
     }
   }
@@ -118,38 +128,66 @@ class AudioEngine {
       const { project } = useStore.getState();
       const node = project.nodes.find((n) => n.id === nodeId);
       if (node && (node.data as SoundNodeData).playing && !track.source) {
-        this.startSource(nodeId, (node.data as SoundNodeData).loop);
+        this.startSource(nodeId, node.data as SoundNodeData);
       }
     } catch (e) {
       console.error('Audio load failed:', filePath, e);
     }
   }
 
-  private startSource(nodeId: string, loop: boolean) {
+  private startSource(nodeId: string, data: SoundNodeData) {
     const ctx = this.ctx_();
     const track = this.tracks.get(nodeId);
     if (!track?.buffer) return;
 
     const source = ctx.createBufferSource();
     source.buffer = track.buffer;
-    source.loop = loop;
+    source.loop = data.loop;
+
+    // pitch randomization
+    if (data.pitchMin !== data.pitchMax) {
+      source.playbackRate.value = data.pitchMin + Math.random() * (data.pitchMax - data.pitchMin);
+    } else {
+      source.playbackRate.value = data.pitchMin;
+    }
+
+    // pan randomization
+    const randomPan = data.panRandom > 0
+      ? data.pan + (Math.random() * 2 - 1) * data.panRandom
+      : data.pan;
+    track.panner.pan.setValueAtTime(Math.max(-1, Math.min(1, randomPan)), ctx.currentTime);
+
     source.connect(track.gain);
+
+    // fade in
+    if (data.fadeIn > 0) {
+      track.gain.gain.setValueAtTime(0, ctx.currentTime);
+      track.gain.gain.linearRampToValueAtTime(data.volume, ctx.currentTime + data.fadeIn);
+    }
+
     source.start(0);
     track.source = source;
 
     source.onended = () => {
       if (track.source !== source) return;
       track.source = null;
-      if (!loop) {
+      if (!data.loop) {
         useStore.getState().updateNodeData(nodeId, { playing: false });
       }
     };
   }
 
-  private stopTrack(nodeId: string) {
+  private stopTrack(nodeId: string, fadeOut = 0) {
     const track = this.tracks.get(nodeId);
     if (!track?.source) return;
-    try { track.source.stop(0); } catch { /* already stopped */ }
+    const source = track.source;
+    const ctx = this.ctx_();
+    if (fadeOut > 0) {
+      track.gain.gain.setTargetAtTime(0, ctx.currentTime, fadeOut / 3);
+      source.stop(ctx.currentTime + fadeOut);
+    } else {
+      try { source.stop(0); } catch { /* already stopped */ }
+    }
     track.source = null;
   }
 }

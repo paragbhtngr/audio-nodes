@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -13,12 +13,16 @@ import {
   type EdgeChange,
   type Node,
   type Edge,
+  type OnSelectionChangeParams,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../state/store';
 import { MasterOutNode } from '../components/nodes/MasterOutNode';
 import { SoundNode } from '../components/nodes/SoundNode';
-import type { AudioFile, AudioNodeData } from '../types';
+import { Inspector } from '../components/inspector/Inspector';
+import { HotkeyHUD } from '../components/HotkeyHUD';
+import { audioEngine } from '../audio/engine';
+import type { AudioFile, AudioNodeData, SoundNodeData } from '../types';
 
 const nodeTypes = { sound: SoundNode, master: MasterOutNode };
 
@@ -30,15 +34,35 @@ function toRFEdge(e: { id: string; source: string; target: string }): Edge {
   return { id: e.id, source: e.source, target: e.target };
 }
 
+// Serialize paths to relative before saving, restore after loading
+async function serializeProject(project: object, projectPath: string): Promise<string> {
+  if (!window.audioNodes) return JSON.stringify(project, null, 2);
+  const clone = structuredClone(project) as { library: { path: string }[] };
+  for (const file of clone.library) {
+    file.path = await window.audioNodes.relativizePath(projectPath, file.path);
+  }
+  return JSON.stringify(clone, null, 2);
+}
+
+async function deserializeProject(json: string, projectPath: string): Promise<object> {
+  const parsed = JSON.parse(json) as { library: { path: string }[] };
+  if (!window.audioNodes) return parsed;
+  for (const file of parsed.library) {
+    if (!file.path.startsWith('/')) {
+      file.path = await window.audioNodes.absolutizePath(projectPath, file.path);
+    }
+  }
+  return parsed;
+}
+
 function Canvas() {
   const project = useStore((s) => s.project);
-  const { addSoundNode, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition } = useStore((s) => s);
+  const { addSoundNode, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
   const { screenToFlowPosition } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(project.nodes.map(toRFNode));
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(project.edges.map(toRFEdge));
 
-  // sync RF state when the project is replaced (new/load)
   const prevProjectRef = useRef(project);
   useEffect(() => {
     if (prevProjectRef.current !== project) {
@@ -48,7 +72,7 @@ function Canvas() {
     }
   }, [project, setNodes, setEdges]);
 
-  // keep RF node data in sync when audio state changes (playing, volume, etc.)
+  // keep RF node data in sync when audio state changes
   useEffect(() => {
     setNodes((rn) =>
       rn.map((rfNode) => {
@@ -57,6 +81,13 @@ function Canvas() {
       })
     );
   }, [project.nodes, setNodes]);
+
+  const onSelectionChange = useCallback(
+    ({ nodes: selected }: OnSelectionChangeParams) => {
+      selectNode(selected[0]?.id ?? null);
+    },
+    [selectNode]
+  );
 
   const onConnect = useCallback(
     (conn: Connection) => {
@@ -108,20 +139,81 @@ function Canvas() {
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
+        onSelectionChange={onSelectionChange}
         fitView
       >
         <Background gap={16} />
         <MiniMap pannable zoomable />
         <Controls />
       </ReactFlow>
+      <HotkeyHUD />
     </div>
+  );
+}
+
+function LibraryItem({ file }: { file: AudioFile }) {
+  const renameAudioFile = useStore((s) => s.renameAudioFile);
+  const removeAudioFile = useStore((s) => s.removeAudioFile);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(file.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed) renameAudioFile(file.id, trimmed);
+    else setDraft(file.name);
+    setEditing(false);
+  };
+
+  return (
+    <li
+      className="library-item"
+      draggable={!editing}
+      onDragStart={(e) => {
+        e.dataTransfer.setData('fileId', file.id);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
+    >
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="library-item__rename"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') { setDraft(file.name); setEditing(false); }
+            e.stopPropagation();
+          }}
+        />
+      ) : (
+        <span
+          className="library-item__name"
+          title="Click to rename"
+          onClick={() => { setDraft(file.name); setEditing(true); }}
+        >
+          {file.name}
+        </span>
+      )}
+      <button
+        className="library-item__remove"
+        onClick={() => removeAudioFile(file.id)}
+        title="Remove from library"
+      >
+        ×
+      </button>
+    </li>
   );
 }
 
 function LibraryPanel() {
   const library = useStore((s) => s.project.library);
   const addAudioFile = useStore((s) => s.addAudioFile);
-  const removeAudioFile = useStore((s) => s.removeAudioFile);
 
   const pickFiles = async () => {
     if (!window.audioNodes) return;
@@ -147,29 +239,37 @@ function LibraryPanel() {
         <p className="hint">Add audio files, then drag them onto the canvas.</p>
       )}
       <ul className="library-list">
-        {library.map((file) => (
-          <li
-            key={file.id}
-            className="library-item"
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData('fileId', file.id);
-              e.dataTransfer.effectAllowed = 'copy';
-            }}
-          >
-            <span className="library-item__name">{file.name}</span>
-            <button
-              className="library-item__remove"
-              onClick={() => removeAudioFile(file.id)}
-              title="Remove from library"
-            >
-              ×
-            </button>
-          </li>
-        ))}
+        {library.map((file) => <LibraryItem key={file.id} file={file} />)}
       </ul>
     </aside>
   );
+}
+
+function HotkeyHandler() {
+  const hotkeys = useStore((s) => s.project.hotkeys);
+  const nodes = useStore((s) => s.project.nodes);
+  const updateNodeData = useStore((s) => s.updateNodeData);
+
+  // re-register global shortcuts whenever hotkeys change
+  useEffect(() => {
+    if (!window.audioNodes) return;
+    window.audioNodes.registerHotkeys(hotkeys);
+  }, [hotkeys]);
+
+  // handle triggered hotkeys from main process
+  useEffect(() => {
+    if (!window.audioNodes) return;
+    return window.audioNodes.onHotkeyTriggered((key) => {
+      const nodeId = hotkeys[key];
+      if (!nodeId) return;
+      const node = nodes.find((n) => n.id === nodeId);
+      if (!node || node.type !== 'sound') return;
+      audioEngine.resume();
+      updateNodeData(nodeId, { playing: !(node.data as SoundNodeData).playing });
+    });
+  }, [hotkeys, nodes, updateNodeData]);
+
+  return null;
 }
 
 function MenuHandler() {
@@ -179,28 +279,30 @@ function MenuHandler() {
 
   useEffect(() => {
     if (!window.audioNodes) return;
-    const unsub = window.audioNodes.onMenuAction(async (action) => {
+    return window.audioNodes.onMenuAction(async (action) => {
       if (action === 'new') {
         newProject();
       } else if (action === 'open') {
         const path = await window.audioNodes.showOpenDialog();
         if (!path) return;
         const json = await window.audioNodes.loadProject(path);
-        setProject(JSON.parse(json));
+        const parsed = await deserializeProject(json, path);
+        setProject(parsed as Parameters<typeof setProject>[0]);
         setFilePath(path);
       } else if (action === 'save') {
         const savePath = filePath ?? (await window.audioNodes.showSaveDialog(project.name));
         if (!savePath) return;
-        await window.audioNodes.saveProject(savePath, JSON.stringify(project, null, 2));
+        const json = await serializeProject(project, savePath);
+        await window.audioNodes.saveProject(savePath, json);
         setFilePath(savePath);
       } else if (action === 'saveAs') {
         const savePath = await window.audioNodes.showSaveDialog(project.name);
         if (!savePath) return;
-        await window.audioNodes.saveProject(savePath, JSON.stringify(project, null, 2));
+        const json = await serializeProject(project, savePath);
+        await window.audioNodes.saveProject(savePath, json);
         setFilePath(savePath);
       }
     });
-    return unsub;
   }, [newProject, setProject, setFilePath, filePath, project]);
 
   return null;
@@ -210,10 +312,12 @@ export function EditView() {
   return (
     <div className="edit-view">
       <MenuHandler />
+      <HotkeyHandler />
       <LibraryPanel />
       <ReactFlowProvider>
         <Canvas />
       </ReactFlowProvider>
+      <Inspector />
     </div>
   );
 }
