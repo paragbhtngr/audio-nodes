@@ -142,9 +142,12 @@ ipcMain.handle('path:absolutize', (_evt, projectPath: string, relPath: string) =
 let currentHotkeys: Record<string, string> = {};
 const registeredKeys = new Set<string>();
 
+let hotkeysEnabled = true;
+
 function applyHotkeys() {
   for (const key of registeredKeys) globalShortcut.unregister(key);
   registeredKeys.clear();
+  if (!hotkeysEnabled) return;
   for (const key of Object.keys(currentHotkeys)) {
     try {
       const ok = globalShortcut.register(key, () => {
@@ -166,6 +169,12 @@ function clearHotkeys() {
 ipcMain.handle('hotkeys:register', (_evt, hotkeys: Record<string, string>) => {
   currentHotkeys = hotkeys;
   if (mainWindow?.isFocused()) applyHotkeys();
+});
+
+ipcMain.handle('hotkeys:setEnabled', (_evt, enabled: boolean) => {
+  hotkeysEnabled = enabled;
+  if (enabled && mainWindow?.isFocused()) applyHotkeys();
+  else clearHotkeys();
 });
 
 app.whenReady().then(() => {

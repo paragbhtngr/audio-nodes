@@ -24,6 +24,7 @@ export interface AudioNodesAPI {
 
   // Hotkeys
   registerHotkeys: (hotkeys: Record<string, string>) => Promise<void>;
+  setHotkeysEnabled: (enabled: boolean) => Promise<void>;
   onHotkeyTriggered: (cb: (key: string) => void) => () => void;
 
   // Menu events from main process

@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('audioNodes', {
   registerHotkeys: (hotkeys: Record<string, string>): Promise<void> =>
     ipcRenderer.invoke('hotkeys:register', hotkeys),
 
+  setHotkeysEnabled: (enabled: boolean): Promise<void> =>
+    ipcRenderer.invoke('hotkeys:setEnabled', enabled),
+
   onMenuAction: (cb: (action: string) => void) => {
     const handler = (_: Electron.IpcRendererEvent, action: string) => cb(action);
     ipcRenderer.on('menu:action', handler);
