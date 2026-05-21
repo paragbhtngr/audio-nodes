@@ -25,10 +25,6 @@ class AudioEngine {
     return this.ctx;
   }
 
-  resume() {
-    this.ctx?.resume();
-  }
-
   init() {
     this.unsub = useStore.subscribe((state) => this.reconcile(state.project));
     this.reconcile(useStore.getState().project);
@@ -145,36 +141,48 @@ class AudioEngine {
     source.loop = data.loop;
 
     // pitch randomization
-    if (data.pitchMin !== data.pitchMax) {
-      source.playbackRate.value = data.pitchMin + Math.random() * (data.pitchMax - data.pitchMin);
-    } else {
-      source.playbackRate.value = data.pitchMin;
-    }
+    source.playbackRate.value = data.pitchMin === data.pitchMax
+      ? data.pitchMin
+      : data.pitchMin + Math.random() * (data.pitchMax - data.pitchMin);
 
     // pan randomization
-    const randomPan = data.panRandom > 0
+    const pan = data.panRandom > 0
       ? data.pan + (Math.random() * 2 - 1) * data.panRandom
       : data.pan;
-    track.panner.pan.setValueAtTime(Math.max(-1, Math.min(1, randomPan)), ctx.currentTime);
+    track.panner.pan.setValueAtTime(Math.max(-1, Math.min(1, pan)), ctx.currentTime);
 
     source.connect(track.gain);
 
-    // fade in
+    // always cancel any leftover automation (e.g. from a previous fade-out)
+    // and set the gain explicitly before starting
+    track.gain.gain.cancelScheduledValues(ctx.currentTime);
     if (data.fadeIn > 0) {
       track.gain.gain.setValueAtTime(0, ctx.currentTime);
       track.gain.gain.linearRampToValueAtTime(data.volume, ctx.currentTime + data.fadeIn);
+    } else {
+      track.gain.gain.setValueAtTime(data.volume, ctx.currentTime);
     }
 
-    source.start(0);
-    track.source = source;
-
-    source.onended = () => {
-      if (track.source !== source) return;
-      track.source = null;
-      if (!data.loop) {
-        useStore.getState().updateNodeData(nodeId, { playing: false });
-      }
+    const launch = () => {
+      source.start(0);
+      track.source = source;
+      source.onended = () => {
+        if (track.source !== source) return;
+        track.source = null;
+        if (!data.loop) useStore.getState().updateNodeData(nodeId, { playing: false });
+      };
     };
+
+    // AudioContext may be suspended until a user gesture; wait for it
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(() => {
+        // verify the node is still supposed to be playing
+        const node = useStore.getState().project.nodes.find((n) => n.id === nodeId);
+        if (node && (node.data as SoundNodeData).playing && !track.source) launch();
+      });
+    } else {
+      launch();
+    }
   }
 
   private stopTrack(nodeId: string, fadeOut = 0) {

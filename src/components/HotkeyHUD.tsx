@@ -1,5 +1,4 @@
 import { useStore } from '../state/store';
-import { audioEngine } from '../audio/engine';
 import type { SoundNodeData } from '../types';
 
 export function HotkeyHUD() {
@@ -15,7 +14,6 @@ export function HotkeyHUD() {
   if (entries.length === 0) return null;
 
   const trigger = (nodeId: string) => {
-    audioEngine.resume();
     const node = nodes.find((n) => n.id === nodeId);
     if (!node || node.type !== 'sound') return;
     const data = node.data as SoundNodeData;

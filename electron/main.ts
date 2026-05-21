@@ -139,22 +139,33 @@ ipcMain.handle('path:absolutize', (_evt, projectPath: string, relPath: string) =
   path.resolve(path.dirname(projectPath), relPath)
 );
 
-const registeredHotkeys = new Set<string>();
+let currentHotkeys: Record<string, string> = {};
+const registeredKeys = new Set<string>();
 
-ipcMain.handle('hotkeys:register', (_evt, hotkeys: Record<string, string>) => {
-  for (const key of registeredHotkeys) globalShortcut.unregister(key);
-  registeredHotkeys.clear();
-  for (const key of Object.keys(hotkeys)) {
+function applyHotkeys() {
+  for (const key of registeredKeys) globalShortcut.unregister(key);
+  registeredKeys.clear();
+  for (const key of Object.keys(currentHotkeys)) {
     try {
       const ok = globalShortcut.register(key, () => {
         mainWindow?.webContents.send('hotkey:triggered', key);
       });
-      if (ok) registeredHotkeys.add(key);
+      if (ok) registeredKeys.add(key);
       else console.warn('Could not register hotkey:', key);
     } catch (e) {
       console.warn('Invalid hotkey:', key, e);
     }
   }
+}
+
+function clearHotkeys() {
+  for (const key of registeredKeys) globalShortcut.unregister(key);
+  registeredKeys.clear();
+}
+
+ipcMain.handle('hotkeys:register', (_evt, hotkeys: Record<string, string>) => {
+  currentHotkeys = hotkeys;
+  if (mainWindow?.isFocused()) applyHotkeys();
 });
 
 app.whenReady().then(() => {
@@ -165,6 +176,9 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+app.on('browser-window-focus', () => applyHotkeys());
+app.on('browser-window-blur', () => clearHotkeys());
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();

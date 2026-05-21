@@ -1,6 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
-import { audioEngine } from '../../audio/engine';
 import type { SoundNodeData } from '../../types';
 
 export function SoundNode({ id }: NodeProps) {
@@ -17,7 +16,6 @@ export function SoundNode({ id }: NodeProps) {
   const file = library.find((f) => f.id === data.fileId);
 
   const togglePlay = () => {
-    audioEngine.resume();
     updateNodeData(id, { playing: !data.playing });
   };
 

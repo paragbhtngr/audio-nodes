@@ -13,7 +13,6 @@ import {
   type EdgeChange,
   type Node,
   type Edge,
-  type OnSelectionChangeParams,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useStore } from '../state/store';
@@ -21,7 +20,6 @@ import { MasterOutNode } from '../components/nodes/MasterOutNode';
 import { SoundNode } from '../components/nodes/SoundNode';
 import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
-import { audioEngine } from '../audio/engine';
 import type { AudioFile, AudioNodeData, SoundNodeData } from '../types';
 
 const nodeTypes = { sound: SoundNode, master: MasterOutNode };
@@ -82,10 +80,8 @@ function Canvas() {
     );
   }, [project.nodes, setNodes]);
 
-  const onSelectionChange = useCallback(
-    ({ nodes: selected }: OnSelectionChangeParams) => {
-      selectNode(selected[0]?.id ?? null);
-    },
+  const onNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => selectNode(node.id),
     [selectNode]
   );
 
@@ -139,7 +135,7 @@ function Canvas() {
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
-        onSelectionChange={onSelectionChange}
+        onNodeClick={onNodeClick}
         fitView
       >
         <Background gap={16} />
@@ -264,7 +260,6 @@ function HotkeyHandler() {
       if (!nodeId) return;
       const node = nodes.find((n) => n.id === nodeId);
       if (!node || node.type !== 'sound') return;
-      audioEngine.resume();
       updateNodeData(nodeId, { playing: !(node.data as SoundNodeData).playing });
     });
   }, [hotkeys, nodes, updateNodeData]);
