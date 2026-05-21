@@ -197,6 +197,75 @@ class AudioEngine {
     }
   }
 
+  private applyDucking(data: PlayableData) {
+    if (!data.duckTargets.length || data.duckAmount <= 0) return;
+    const ctx = this.ctx_();
+    const project = useStore.getState().project;
+    for (const groupId of data.duckTargets) {
+      const groupGain = this.groupGains.get(groupId);
+      if (!groupGain) continue;
+      const groupNode = project.nodes.find((n) => n.id === groupId);
+      if (!groupNode) continue;
+      const targetVol = (groupNode.data as GroupNodeData).volume * (1 - data.duckAmount);
+      groupGain.gain.cancelScheduledValues(ctx.currentTime);
+      groupGain.gain.setTargetAtTime(targetVol, ctx.currentTime, 0.05);
+    }
+  }
+
+  private releaseDucking(data: PlayableData) {
+    if (!data.duckTargets.length || data.duckAmount <= 0) return;
+    const ctx = this.ctx_();
+    const project = useStore.getState().project;
+    for (const groupId of data.duckTargets) {
+      const groupGain = this.groupGains.get(groupId);
+      if (!groupGain) continue;
+      const groupNode = project.nodes.find((n) => n.id === groupId);
+      if (!groupNode) continue;
+      const fullVol = (groupNode.data as GroupNodeData).volume;
+      groupGain.gain.cancelScheduledValues(ctx.currentTime);
+      groupGain.gain.setTargetAtTime(fullVol, ctx.currentTime, data.duckRelease / 3);
+    }
+  }
+
+  crossfade(fromGroupId: string, toGroupId: string, duration: number) {
+    const ctx = this.ctx_();
+    const fromGain = this.groupGains.get(fromGroupId);
+    const toGain = this.groupGains.get(toGroupId);
+    if (!fromGain || !toGain) return;
+
+    const project = useStore.getState().project;
+    const fromNode = project.nodes.find((n) => n.id === fromGroupId);
+    const toNode = project.nodes.find((n) => n.id === toGroupId);
+    if (!fromNode || !toNode) return;
+
+    const toVol = (toNode.data as GroupNodeData).volume;
+    const fromVol = (fromNode.data as GroupNodeData).volume;
+
+    // Start target group members
+    const toMemberIds = project.edges.filter((e) => e.target === toGroupId).map((e) => e.source);
+    toMemberIds.forEach((id) => useStore.getState().updateNodeData(id, { playing: true }));
+
+    // Ramp target up, source down
+    toGain.gain.cancelScheduledValues(ctx.currentTime);
+    toGain.gain.setValueAtTime(0, ctx.currentTime);
+    toGain.gain.linearRampToValueAtTime(toVol, ctx.currentTime + duration);
+
+    fromGain.gain.cancelScheduledValues(ctx.currentTime);
+    fromGain.gain.setValueAtTime(fromVol, ctx.currentTime);
+    fromGain.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
+
+    // After fade: stop source members, restore its gain for next time
+    setTimeout(() => {
+      const state = useStore.getState();
+      const fromMemberIds = state.project.edges.filter((e) => e.target === fromGroupId).map((e) => e.source);
+      fromMemberIds.forEach((id) => state.updateNodeData(id, { playing: false }));
+      const updatedFrom = state.project.nodes.find((n) => n.id === fromGroupId);
+      if (updatedFrom) {
+        fromGain.gain.setValueAtTime((updatedFrom.data as GroupNodeData).volume, this.ctx_().currentTime);
+      }
+    }, duration * 1000);
+  }
+
   private startSource(nodeId: string, data: PlayableData, buffer: AudioBuffer) {
     const ctx = this.ctx_();
     const track = this.tracks.get(nodeId);
@@ -204,7 +273,6 @@ class AudioEngine {
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    // RandomPool loops by re-picking; SoundNode uses source.loop
     source.loop = data.kind === 'sound' ? data.loop : false;
     source.playbackRate.value = data.pitchMin === data.pitchMax
       ? data.pitchMin
@@ -225,20 +293,23 @@ class AudioEngine {
     }
 
     const launch = () => {
+      this.applyDucking(data);
       source.start(0);
       track.source = source;
       source.onended = () => {
         if (track.source !== source) return;
         track.source = null;
+        // Use current node data for release (user may have changed settings)
+        const current = useStore.getState().project.nodes.find((n) => n.id === nodeId)?.data as PlayableData | undefined;
+        if (current) this.releaseDucking(current);
         const project = useStore.getState().project;
         const node = project.nodes.find((n) => n.id === nodeId);
         if (!node) return;
-        const current = node.data as PlayableData;
-        if (current.playing && current.loop && current.kind === 'randomPool') {
-          // Pick the next random sound
-          this.reconcilePool(nodeId, current, project);
-        } else if (!current.loop || current.kind !== 'randomPool') {
-          if (!current.loop) useStore.getState().updateNodeData(nodeId, { playing: false });
+        const cur = node.data as PlayableData;
+        if (cur.playing && cur.loop && cur.kind === 'randomPool') {
+          this.reconcilePool(nodeId, cur, project);
+        } else if (!cur.loop) {
+          useStore.getState().updateNodeData(nodeId, { playing: false });
         }
       };
     };

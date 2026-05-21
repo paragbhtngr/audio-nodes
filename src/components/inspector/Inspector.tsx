@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '../../state/store';
 import { usePrefabStore } from '../../state/prefabStore';
+import { audioEngine } from '../../audio/engine';
 import type { SoundNodeData, MasterNodeData, GroupNodeData, RandomPoolNodeData } from '../../types';
 
 const EMOJI_CATEGORIES: Record<string, string[]> = {
@@ -209,8 +210,107 @@ function GroupInspector({ id }: { id: string }) {
       <div className="insp__section-title">Hotkey</div>
       <HotkeyField nodeId={id} />
 
+      <CrossfadeSection groupId={id} />
+
       <div className="insp__section-title">Prefab</div>
       <SavePrefabButton groupId={id} />
+    </>
+  );
+}
+
+function CrossfadeSection({ groupId }: { groupId: string }) {
+  const groups = useStore((s) =>
+    s.project.nodes.filter((n) => n.type === 'group' && n.id !== groupId)
+  );
+  const [targetId, setTargetId] = useState('');
+  const [duration, setDuration] = useState(3);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <>
+      <div className="insp__section-title">Crossfade</div>
+      <div className="insp__field">
+        <select
+          className="insp__select nodrag"
+          value={targetId}
+          onChange={(e) => setTargetId(e.target.value)}
+        >
+          <option value="">Fade to…</option>
+          {groups.map((g) => {
+            const d = g.data as GroupNodeData;
+            return <option key={g.id} value={g.id}>{d.icon} {d.label}</option>;
+          })}
+        </select>
+      </div>
+      <SliderRow
+        label="Duration"
+        value={duration}
+        min={0.5} max={10} step={0.5}
+        display={`${duration}s`}
+        onChange={setDuration}
+      />
+      <button
+        className="an-btn an-btn--primary"
+        style={{ width: '100%', marginTop: 4 }}
+        disabled={!targetId}
+        onClick={() => targetId && audioEngine.crossfade(groupId, targetId, duration)}
+      >
+        Crossfade →
+      </button>
+    </>
+  );
+}
+
+function DuckingSection({ nodeId, data }: { nodeId: string; data: SoundNodeData | RandomPoolNodeData }) {
+  const groups = useStore((s) => s.project.nodes.filter((n) => n.type === 'group'));
+  const update = useStore((s) => s.updateNodeData);
+
+  const toggle = (groupId: string) => {
+    const next = data.duckTargets.includes(groupId)
+      ? data.duckTargets.filter((id) => id !== groupId)
+      : [...data.duckTargets, groupId];
+    update(nodeId, { duckTargets: next });
+  };
+
+  if (groups.length === 0) return null;
+
+  return (
+    <>
+      <div className="insp__section-title">Ducking</div>
+      <div className="insp__field">
+        {groups.map((g) => {
+          const d = g.data as GroupNodeData;
+          return (
+            <label key={g.id} className="insp__check" style={{ marginBottom: 3 }}>
+              <input
+                type="checkbox"
+                checked={data.duckTargets.includes(g.id)}
+                onChange={() => toggle(g.id)}
+              />
+              <span style={{ color: d.color }}>{d.icon} {d.label}</span>
+            </label>
+          );
+        })}
+      </div>
+      {data.duckTargets.length > 0 && (
+        <>
+          <SliderRow
+            label="Duck amount"
+            value={data.duckAmount}
+            min={0} max={1} step={0.01}
+            display={`${Math.round(data.duckAmount * 100)}%`}
+            onChange={(v) => update(nodeId, { duckAmount: v })}
+          />
+          <SliderRow
+            label="Release"
+            value={data.duckRelease}
+            min={0.1} max={5} step={0.1}
+            display={`${data.duckRelease.toFixed(1)}s`}
+            onChange={(v) => update(nodeId, { duckRelease: v })}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -321,6 +421,8 @@ function SoundInspector({ id }: { id: string }) {
         onChange={(v) => u({ pitchMax: Math.max(v, data.pitchMin) })}
       />
 
+      <DuckingSection nodeId={id} data={data} />
+
       <div className="insp__section-title">Hotkey</div>
       <HotkeyField nodeId={id} />
     </>
@@ -379,6 +481,8 @@ function RandomPoolInspector({ id }: { id: string }) {
         display={`×${data.pitchMin.toFixed(2)}`} onChange={(v) => u({ pitchMin: Math.min(v, data.pitchMax) })} />
       <SliderRow label="Pitch Max" value={data.pitchMax} min={0.25} max={4} step={0.01}
         display={`×${data.pitchMax.toFixed(2)}`} onChange={(v) => u({ pitchMax: Math.max(v, data.pitchMin) })} />
+
+      <DuckingSection nodeId={id} data={data} />
 
       <div className="insp__section-title">Hotkey</div>
       <HotkeyField nodeId={id} />

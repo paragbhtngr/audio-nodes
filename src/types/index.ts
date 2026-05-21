@@ -17,6 +17,9 @@ export interface SoundNodeData {
   panRandom: number;
   pitchMin: number;
   pitchMax: number;
+  duckTargets: string[];
+  duckAmount: number;
+  duckRelease: number;
 }
 
 export interface MasterNodeData {
@@ -45,6 +48,9 @@ export interface RandomPoolNodeData {
   panRandom: number;
   pitchMin: number;
   pitchMax: number;
+  duckTargets: string[];
+  duckAmount: number;
+  duckRelease: number;
 }
 
 export type AudioNodeData = SoundNodeData | MasterNodeData | GroupNodeData | RandomPoolNodeData;

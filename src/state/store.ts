@@ -93,7 +93,7 @@ export const useStore = create<StoreState>()(
           id,
           type: 'sound',
           position,
-          data: { kind: 'sound', fileId, volume: 0.8, loop: true, playing: false, fadeIn: 0, fadeOut: 0, pan: 0, panRandom: 0, pitchMin: 1, pitchMax: 1 },
+          data: { kind: 'sound', fileId, volume: 0.8, loop: true, playing: false, fadeIn: 0, fadeOut: 0, pan: 0, panRandom: 0, pitchMin: 1, pitchMax: 1, duckTargets: [], duckAmount: 0.5, duckRelease: 1 },
         };
         const autoEdge: ProjectEdge = { id: `edge-${id}-${MASTER_NODE_ID}`, source: id, target: MASTER_NODE_ID };
         set((s) => ({ project: { ...s.project, nodes: [...s.project.nodes, newNode], edges: [...s.project.edges, autoEdge] } }));
@@ -119,7 +119,7 @@ export const useStore = create<StoreState>()(
           id,
           type: 'randomPool',
           position,
-          data: { kind: 'randomPool', fileIds: [], volume: 0.8, loop: false, playing: false, fadeIn: 0, fadeOut: 0, pan: 0, panRandom: 0, pitchMin: 1, pitchMax: 1 },
+          data: { kind: 'randomPool', fileIds: [], volume: 0.8, loop: false, playing: false, fadeIn: 0, fadeOut: 0, pan: 0, panRandom: 0, pitchMin: 1, pitchMax: 1, duckTargets: [], duckAmount: 0.5, duckRelease: 1 },
         };
         const autoEdge: ProjectEdge = { id: `edge-${id}-${MASTER_NODE_ID}`, source: id, target: MASTER_NODE_ID };
         set((s) => ({ project: { ...s.project, nodes: [...s.project.nodes, newNode], edges: [...s.project.edges, autoEdge] } }));
