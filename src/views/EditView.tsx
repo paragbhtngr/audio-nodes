@@ -88,10 +88,14 @@ function Canvas() {
 
   const onConnect = useCallback(
     (conn: Connection) => {
-      setEdges((eds) => rfAddEdge(conn, eds));
-      storeAddEdge({ source: conn.source!, target: conn.target! });
+      const sourceId = conn.source!;
+      // Sound and group nodes have a single output — replace any existing outgoing edge
+      const displaced = useStore.getState().project.edges.filter((e) => e.source === sourceId);
+      displaced.forEach((e) => storeRemoveEdge(e.id));
+      setEdges((eds) => rfAddEdge(conn, eds.filter((e) => e.source !== sourceId)));
+      storeAddEdge({ source: sourceId, target: conn.target! });
     },
-    [setEdges, storeAddEdge]
+    [setEdges, storeAddEdge, storeRemoveEdge]
   );
 
   const handleEdgesChange = useCallback(
@@ -171,7 +175,7 @@ function Canvas() {
       <div className="canvas-toolbar">
         <button className="an-btn" onClick={addGroup}>+ Add Group</button>
       </div>
-      <div className="canvas" onDragOver={onDragOver} onDrop={onDrop}>
+      <div className="canvas">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -181,6 +185,8 @@ function Canvas() {
         onConnect={onConnect}
         onNodeDragStop={onNodeDragStop}
         onNodeClick={onNodeClick}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
         fitView
       >
         <Background gap={16} />
