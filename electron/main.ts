@@ -238,10 +238,18 @@ ipcMain.handle('youtube:search', async (_evt, query: string) => {
     }),
   });
   const data = await res.json() as Record<string, unknown>;
-  const results: Array<{ videoId: string; title: string }> = [];
+  const results: Array<{ videoId: string; title: string; duration: string; thumbnail: string }> = [];
   try {
+    type Thumbnail = { url: string; width: number; height: number };
     type Section = { itemSectionRenderer?: { contents: Item[] } };
-    type Item = { videoRenderer?: { videoId: string; title: { runs: { text: string }[] } } };
+    type Item = {
+      videoRenderer?: {
+        videoId: string;
+        title: { runs: { text: string }[] };
+        lengthText?: { simpleText: string };
+        thumbnail?: { thumbnails: Thumbnail[] };
+      };
+    };
     const sections = (
       (data.contents as Record<string, unknown>)
         ?.twoColumnSearchResultsRenderer as Record<string, unknown>
@@ -250,7 +258,15 @@ ipcMain.handle('youtube:search', async (_evt, query: string) => {
     for (const section of list) {
       for (const item of section.itemSectionRenderer?.contents ?? []) {
         const vr = item.videoRenderer;
-        if (vr?.videoId) results.push({ videoId: vr.videoId, title: vr.title?.runs?.[0]?.text ?? '' });
+        if (vr?.videoId) {
+          const thumbs = vr.thumbnail?.thumbnails ?? [];
+          results.push({
+            videoId: vr.videoId,
+            title: vr.title?.runs?.[0]?.text ?? '',
+            duration: vr.lengthText?.simpleText ?? '',
+            thumbnail: thumbs[thumbs.length - 1]?.url ?? '',
+          });
+        }
         if (results.length >= 8) break;
       }
       if (results.length >= 8) break;

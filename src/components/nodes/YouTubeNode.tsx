@@ -1,5 +1,5 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from '../../state/store';
 import type { YouTubeNodeData } from '../../types';
 
@@ -7,6 +7,7 @@ import type { YouTubeNodeData } from '../../types';
 interface YTPlayer {
   playVideo(): void;
   pauseVideo(): void;
+  seekTo(seconds: number, allowSeekAhead: boolean): void;
   setVolume(v: number): void;
   destroy(): void;
 }
@@ -17,7 +18,10 @@ declare global {
       Player: new (el: string | HTMLElement, opts: {
         height: string; width: string; videoId: string;
         playerVars?: Record<string, number>;
-        events?: { onReady?: (e: { target: YTPlayer }) => void; onStateChange?: (e: YTPlayerEvent) => void };
+        events?: {
+          onReady?: (e: { target: YTPlayer }) => void;
+          onStateChange?: (e: YTPlayerEvent) => void;
+        };
       }) => YTPlayer;
       PlayerState: { ENDED: number };
     };
@@ -54,12 +58,11 @@ export function YouTubeNode({ id }: NodeProps) {
   const removeNode = useStore((s) => s.removeNode);
 
   const playerRef = useRef<YTPlayer | null>(null);
+  const loopRef = useRef(false);
   const playerDivId = `yt-player-${id}`;
 
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Array<{ videoId: string; title: string }>>([]);
-  const [searching, setSearching] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
+  // Keep loopRef in sync so the onStateChange closure sees the latest value
+  useEffect(() => { loopRef.current = data?.loop ?? false; }, [data?.loop]);
 
   // Create/destroy player when videoId changes
   useEffect(() => {
@@ -77,7 +80,12 @@ export function YouTubeNode({ id }: NodeProps) {
           onReady: (e) => e.target.setVolume(Math.round((data?.volume ?? 0.8) * 100)),
           onStateChange: (e) => {
             if (window.YT && e.data === window.YT.PlayerState.ENDED) {
-              updateNodeData(id, { playing: false });
+              if (loopRef.current) {
+                playerRef.current?.seekTo(0, true);
+                playerRef.current?.playVideo();
+              } else {
+                updateNodeData(id, { playing: false });
+              }
             }
           },
         },
@@ -91,7 +99,6 @@ export function YouTubeNode({ id }: NodeProps) {
     };
   }, [data?.videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync play/pause
   useEffect(() => {
     const p = playerRef.current;
     if (!p) return;
@@ -99,33 +106,11 @@ export function YouTubeNode({ id }: NodeProps) {
     else p.pauseVideo();
   }, [data?.playing]);
 
-  // Sync volume
   useEffect(() => {
     playerRef.current?.setVolume(Math.round((data?.volume ?? 0.8) * 100));
   }, [data?.volume]);
 
-  const search = async () => {
-    if (!query.trim()) return;
-    setSearching(true);
-    setResults([]);
-    try {
-      const r = await window.audioNodes.youtubeSearch(query.trim());
-      setResults(r);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const selectVideo = (videoId: string, title: string) => {
-    updateNodeData(id, { videoId, title, playing: false });
-    setResults([]);
-    setQuery('');
-    setShowSearch(false);
-  };
-
   if (!data) return null;
-
-  const hasVideo = !!data.videoId;
 
   return (
     <div className="an-node an-node--youtube">
@@ -133,63 +118,35 @@ export function YouTubeNode({ id }: NodeProps) {
         <span className="an-node__yt-label">▶ YouTube</span>
         <button className="an-node__delete" onClick={() => removeNode(id)} title="Remove node">×</button>
       </div>
-
-      {hasVideo && !showSearch ? (
-        <div className="an-node__body">
+      <div className="an-node__body">
+        {data.videoId ? (
           <div className="an-node__yt-title" title={data.title}>{data.title || 'Untitled'}</div>
-          <div className="an-node__row">
-            <label className="an-node__label">Volume</label>
-            <span className="an-node__value">{Math.round(data.volume * 100)}%</span>
-          </div>
-          <input
-            type="range" className="an-node__slider nodrag"
-            min={0} max={1} step={0.01} value={data.volume}
-            onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
-          />
-          <div className="an-node__row an-node__row--controls">
-            <button className="an-btn an-node__yt-change nodrag" onClick={() => setShowSearch(true)}>
-              Change
-            </button>
-            <button
-              className={`an-btn ${data.playing ? 'an-btn--stop' : 'an-btn--play'} nodrag`}
-              onClick={() => updateNodeData(id, { playing: !data.playing })}
-            >
-              {data.playing ? '■ Stop' : '▶ Play'}
-            </button>
-          </div>
-          {/* Hidden player element */}
-          <div id={playerDivId} style={{ width: 1, height: 1, overflow: 'hidden', position: 'absolute' }} />
+        ) : (
+          <span className="an-node__muted" style={{ fontSize: 11 }}>No video — search in inspector</span>
+        )}
+        <div className="an-node__row">
+          <label className="an-node__label">Volume</label>
+          <span className="an-node__value">{Math.round(data.volume * 100)}%</span>
         </div>
-      ) : (
-        <div className="an-node__body">
-          {hasVideo && (
-            <button className="an-btn an-node__yt-back nodrag" onClick={() => { setShowSearch(false); setResults([]); }}>
-              ← Back
-            </button>
-          )}
-          <div className="an-node__yt-search-row">
-            <input
-              className="an-node__yt-input nodrag"
-              placeholder="Search YouTube…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') search(); e.stopPropagation(); }}
-            />
-            <button className="an-btn nodrag" onClick={search} disabled={searching}>
-              {searching ? '…' : '🔍'}
-            </button>
-          </div>
-          {results.length > 0 && (
-            <ul className="an-node__yt-results nodrag">
-              {results.map((r) => (
-                <li key={r.videoId} className="an-node__yt-result" onClick={() => selectVideo(r.videoId, r.title)}>
-                  {r.title}
-                </li>
-              ))}
-            </ul>
-          )}
+        <input
+          type="range" className="an-node__slider nodrag"
+          min={0} max={1} step={0.01} value={data.volume}
+          onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
+        />
+        <div className="an-node__row an-node__row--controls">
+          {data.loop && <span className="an-node__yt-loop-badge">↻</span>}
+          <button
+            className={`an-btn ${data.playing ? 'an-btn--stop' : 'an-btn--play'} nodrag`}
+            style={{ marginLeft: 'auto' }}
+            disabled={!data.videoId}
+            onClick={() => updateNodeData(id, { playing: !data.playing })}
+          >
+            {data.playing ? '■ Stop' : '▶ Play'}
+          </button>
         </div>
-      )}
+        {/* Hidden YT player element */}
+        <div id={playerDivId} style={{ width: 1, height: 1, overflow: 'hidden', position: 'absolute' }} />
+      </div>
       <Handle type="source" position={Position.Right} />
     </div>
   );

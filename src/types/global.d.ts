@@ -36,7 +36,7 @@ export interface AudioNodesAPI {
   onMenuAction: (cb: (action: string) => void) => () => void;
 
   // YouTube search
-  youtubeSearch: (query: string) => Promise<Array<{ videoId: string; title: string }>>;
+  youtubeSearch: (query: string) => Promise<Array<{ videoId: string; title: string; duration: string; thumbnail: string }>>;
 }
 
 declare global {

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useStore } from '../../state/store';
 import { usePrefabStore } from '../../state/prefabStore';
 import { audioEngine } from '../../audio/engine';
-import type { SoundNodeData, MasterNodeData, GroupNodeData, RandomPoolNodeData, EffectNodeData } from '../../types';
+import type { SoundNodeData, MasterNodeData, GroupNodeData, RandomPoolNodeData, EffectNodeData, YouTubeNodeData } from '../../types';
 
 const EMOJI_CATEGORIES: Record<string, string[]> = {
   'Music':   ['🎵','🎶','🎸','🎹','🎺','🥁','🎻','🎷','🪗','🪘','🔔','📯'],
@@ -554,6 +554,100 @@ function MasterInspector({ id }: { id: string }) {
   );
 }
 
+type YTResult = { videoId: string; title: string; duration: string; thumbnail: string };
+
+function YouTubeInspector({ id }: { id: string }) {
+  const data = useStore((s) => {
+    const node = s.project.nodes.find((n) => n.id === id);
+    return node?.data as YouTubeNodeData | undefined;
+  });
+  const update = useStore((s) => s.updateNodeData);
+
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<YTResult[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  if (!data) return null;
+  const u = (patch: Partial<YouTubeNodeData>) => update(id, patch);
+
+  const search = async () => {
+    if (!query.trim()) return;
+    setSearching(true);
+    setResults([]);
+    try {
+      const r = await window.audioNodes.youtubeSearch(query.trim());
+      setResults(r);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const select = (r: YTResult) => {
+    u({ videoId: r.videoId, title: r.title, playing: false });
+    setResults([]);
+    setQuery('');
+  };
+
+  return (
+    <>
+      {data.videoId && (
+        <>
+          <div className="insp__section-title">Now Loaded</div>
+          <div className="insp__yt-current">
+            <img
+              className="insp__yt-thumb"
+              src={`https://i.ytimg.com/vi/${data.videoId}/default.jpg`}
+              alt=""
+            />
+            <span className="insp__yt-current-title" title={data.title}>{data.title}</span>
+          </div>
+        </>
+      )}
+
+      <div className="insp__section-title">Search</div>
+      <div className="insp__field">
+        <div className="insp__yt-search-row">
+          <input
+            className="insp__yt-input"
+            placeholder="Search YouTube…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
+          />
+          <button className="an-btn" onClick={search} disabled={searching} style={{ flexShrink: 0 }}>
+            {searching ? '…' : '🔍'}
+          </button>
+        </div>
+      </div>
+
+      {results.length > 0 && (
+        <ul className="insp__yt-results">
+          {results.map((r) => (
+            <li key={r.videoId} className="insp__yt-result" onClick={() => select(r)}>
+              {r.thumbnail && <img className="insp__yt-result-thumb" src={r.thumbnail} alt="" />}
+              <div className="insp__yt-result-info">
+                <span className="insp__yt-result-title">{r.title}</span>
+                {r.duration && <span className="insp__yt-result-dur">{r.duration}</span>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="insp__section-title">Playback</div>
+      <div className="insp__field">
+        <label className="insp__check">
+          <input type="checkbox" checked={data.loop} onChange={(e) => u({ loop: e.target.checked })} />
+          Loop
+        </label>
+      </div>
+
+      <div className="insp__section-title">Hotkey</div>
+      <HotkeyField nodeId={id} />
+    </>
+  );
+}
+
 export function Inspector() {
   const selectedId = useStore((s) => s.selectedNodeId);
   const node = useStore((s) => s.project.nodes.find((n) => n.id === selectedId));
@@ -568,6 +662,7 @@ export function Inspector() {
             {node.type === 'master' ? 'Master Out'
               : node.type === 'group' ? (node.data as GroupNodeData).label
               : node.type === 'randomPool' ? 'Random Pool'
+              : node.type === 'youtube' ? 'YouTube'
               : 'Sound Node'}
           </div>
           {node.type === 'sound' && <SoundInspector id={node.id} />}
@@ -575,6 +670,7 @@ export function Inspector() {
           {node.type === 'group' && <GroupInspector id={node.id} />}
           {node.type === 'randomPool' && <RandomPoolInspector id={node.id} />}
           {node.type === 'effect' && <EffectInspector id={node.id} />}
+          {node.type === 'youtube' && <YouTubeInspector id={node.id} />}
         </>
       )}
     </aside>

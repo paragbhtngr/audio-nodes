@@ -170,9 +170,10 @@ export const useStore = create<StoreState>()(
           id,
           type: 'youtube',
           position,
-          data: { kind: 'youtube', videoId: null, title: '', playing: false, volume: 0.8 } as YouTubeNodeData,
+          data: { kind: 'youtube', videoId: null, title: '', playing: false, loop: false, volume: 0.8 } as YouTubeNodeData,
         };
-        set((s) => ({ project: { ...s.project, nodes: [...s.project.nodes, newNode] } }));
+        const autoEdge: ProjectEdge = { id: `edge-${id}-${MASTER_NODE_ID}`, source: id, target: MASTER_NODE_ID };
+        set((s) => ({ project: { ...s.project, nodes: [...s.project.nodes, newNode], edges: [...s.project.edges, autoEdge] } }));
         return id;
       },
 

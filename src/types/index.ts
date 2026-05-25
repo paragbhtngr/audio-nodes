@@ -77,6 +77,7 @@ export interface YouTubeNodeData {
   videoId: string | null;
   title: string;
   playing: boolean;
+  loop: boolean;
   volume: number;
 }
 
