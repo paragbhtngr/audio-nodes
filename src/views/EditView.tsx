@@ -583,12 +583,12 @@ function HotkeyHandler() {
       const node = nodes.find((n) => n.id === nodeId);
       if (!node) return;
 
-      if (node.type === 'sound' || node.type === 'randomPool') {
+      if (node.type === 'sound' || node.type === 'randomPool' || node.type === 'youtube') {
         updateNodeData(nodeId, { playing: !(node.data as SoundNodeData).playing });
       } else if (node.type === 'group') {
         const memberIds = new Set(edges.filter((e) => e.target === nodeId).map((e) => e.source));
-        const members = nodes.filter((n) => memberIds.has(n.id) && n.type === 'sound');
-        const anyPlaying = members.some((n) => (n.data as SoundNodeData).playing);
+        const members = nodes.filter((n) => memberIds.has(n.id) && (n.type === 'sound' || n.type === 'randomPool' || n.type === 'youtube'));
+        const anyPlaying = members.some((n) => (n.data as { playing?: boolean }).playing);
         members.forEach((n) => updateNodeData(n.id, { playing: !anyPlaying }));
       }
     });

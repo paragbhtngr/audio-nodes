@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
-import type { GroupNodeData, SoundNodeData } from '../../types';
+import type { GroupNodeData, SoundNodeData, YouTubeNodeData } from '../../types';
 
 export function GroupNode({ id }: NodeProps) {
   const data = useStore((s) => {
@@ -13,6 +13,8 @@ export function GroupNode({ id }: NodeProps) {
   const library = useStore((s) => s.project.library);
   const updateNodeData = useStore((s) => s.updateNodeData);
   const removeNode = useStore((s) => s.removeNode);
+  const removeGroupReconnect = useStore((s) => s.removeGroupReconnect);
+  const removeGroupWithMembers = useStore((s) => s.removeGroupWithMembers);
 
   const [editingLabel, setEditingLabel] = useState(false);
   const [draft, setDraft] = useState('');
@@ -29,11 +31,11 @@ export function GroupNode({ id }: NodeProps) {
     .map((e) => nodes.find((n) => n.id === e.source))
     .filter(Boolean) as typeof nodes;
 
-  const anyPlaying = members.some((n) => n.type === 'sound' && (n.data as SoundNodeData).playing);
-  const soundMembers = members.filter((n) => n.type === 'sound');
+  const playableMembers = members.filter((n) => n.type === 'sound' || n.type === 'randomPool' || n.type === 'youtube');
+  const anyPlaying = playableMembers.some((n) => (n.data as { playing?: boolean }).playing);
 
   const toggleAll = () => {
-    soundMembers.forEach((n) => updateNodeData(n.id, { playing: !anyPlaying }));
+    playableMembers.forEach((n) => updateNodeData(n.id, { playing: !anyPlaying }));
   };
 
   const commitLabel = () => {
@@ -44,7 +46,21 @@ export function GroupNode({ id }: NodeProps) {
 
   const toggleCollapse = () => updateNodeData(id, { collapsed: !data.collapsed });
 
+  const deleteGroup = async () => {
+    if (members.length === 0) { removeNode(id); return; }
+    if (!window.audioNodes?.showMessageBox) { removeNode(id); return; }
+    const choice = await window.audioNodes.showMessageBox({
+      title: 'Delete Group',
+      message: `"${data.label}" has ${members.length} connected member${members.length !== 1 ? 's' : ''}. What should happen to them?`,
+      buttons: ['Reconnect to Master', 'Delete Members', 'Cancel'],
+    });
+    if (choice === 0) removeGroupReconnect(id);
+    else if (choice === 1) removeGroupWithMembers(id);
+  };
+
   const memberName = (n: typeof nodes[number]) => {
+    if (n.type === 'youtube') return (n.data as YouTubeNodeData).title || 'YouTube';
+    if (n.type === 'randomPool') return 'Random Pool';
     if (n.type !== 'sound') return n.type;
     const d = n.data as SoundNodeData;
     return d.fileId ? (library.find((f) => f.id === d.fileId)?.name ?? 'Sound') : 'Sound';
@@ -87,7 +103,7 @@ export function GroupNode({ id }: NodeProps) {
         >
           {data.collapsed ? '▸' : '▾'}
         </button>
-        <button className="an-node__delete" onClick={() => removeNode(id)} title="Remove group">×</button>
+        <button className="an-node__delete" onClick={deleteGroup} title="Remove group">×</button>
       </div>
 
       <div className="an-node__body">
@@ -105,7 +121,7 @@ export function GroupNode({ id }: NodeProps) {
 
         {data.collapsed ? (
           <div className="an-node__collapsed-badge" style={{ borderColor: data.color, color: data.color }}>
-            {members.length} sound{members.length !== 1 ? 's' : ''}
+            {members.length} member{members.length !== 1 ? 's' : ''}
             {anyPlaying && <span className="an-node__playing-dot" />}
           </div>
         ) : (
@@ -127,7 +143,7 @@ export function GroupNode({ id }: NodeProps) {
         <button
           className={`an-btn nodrag ${anyPlaying ? 'an-btn--stop' : 'an-btn--play'} an-node__play-all`}
           onClick={toggleAll}
-          disabled={soundMembers.length === 0}
+          disabled={playableMembers.length === 0}
           style={anyPlaying ? {} : { borderColor: data.color, color: data.color, background: `${data.color}15` }}
         >
           {anyPlaying ? '■ Stop All' : '▶ Play All'}
