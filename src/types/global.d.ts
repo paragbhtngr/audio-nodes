@@ -11,10 +11,12 @@ export interface AudioNodesAPI {
   // Audio file I/O
   readFile: (filePath: string) => Promise<ArrayBuffer>;
   pickAudioFiles: () => Promise<string[]>;
+  pickFolder: () => Promise<Array<{ path: string; name: string; folder: string }>>;
 
   // Project persistence
   showSaveDialog: (defaultName: string) => Promise<string | null>;
   showOpenDialog: () => Promise<string | null>;
+  showMessageBox: (opts: { title: string; message: string; buttons: string[] }) => Promise<number>;
   saveProject: (filePath: string, json: string) => Promise<void>;
   loadProject: (filePath: string) => Promise<string>;
 
@@ -32,6 +34,9 @@ export interface AudioNodesAPI {
 
   // Menu events from main process
   onMenuAction: (cb: (action: string) => void) => () => void;
+
+  // YouTube search
+  youtubeSearch: (query: string) => Promise<Array<{ videoId: string; title: string }>>;
 }
 
 declare global {

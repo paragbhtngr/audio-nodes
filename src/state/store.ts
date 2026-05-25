@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
   Project, ProjectNode, ProjectEdge, AudioFile, AudioNodeData,
-  SoundNodeData, EffectType, Scene, Prefab,
+  SoundNodeData, EffectType, Scene, Prefab, YouTubeNodeData,
 } from '../types';
 
 export const MASTER_NODE_ID = 'master-out';
@@ -43,11 +43,13 @@ interface StoreState {
   addAudioFile: (file: AudioFile) => void;
   renameAudioFile: (id: string, name: string) => void;
   removeAudioFile: (id: string) => void;
+  removeFolder: (folder: string) => void;
 
   addSoundNode: (fileId: string | null, position: { x: number; y: number }) => string;
   addGroupNode: (position: { x: number; y: number }) => string;
   addRandomPoolNode: (position: { x: number; y: number }) => string;
   addEffectNode: (effectType: EffectType, position: { x: number; y: number }) => string;
+  addYouTubeNode: (position: { x: number; y: number }) => string;
   instantiatePrefab: (prefab: Prefab, position: { x: number; y: number }) => void;
 
   updateLibraryFileDuration: (fileId: string, duration: number) => void;
@@ -62,6 +64,8 @@ interface StoreState {
   updateNodeData: (id: string, patch: Partial<SoundNodeData> | Partial<AudioNodeData>) => void;
   updateNodePosition: (id: string, position: { x: number; y: number }) => void;
   removeNode: (id: string) => void;
+  removeGroupReconnect: (id: string) => void;
+  removeGroupWithMembers: (id: string) => void;
 
   addEdge: (edge: Omit<ProjectEdge, 'id'>) => void;
   removeEdge: (id: string) => void;
@@ -96,6 +100,11 @@ export const useStore = create<StoreState>()(
       removeAudioFile: (id) =>
         set((s) => ({
           project: { ...s.project, library: s.project.library.filter((f) => f.id !== id) },
+        })),
+
+      removeFolder: (folder) =>
+        set((s) => ({
+          project: { ...s.project, library: s.project.library.filter((f) => f.folder !== folder) },
         })),
 
       addSoundNode: (fileId, position) => {
@@ -148,10 +157,22 @@ export const useStore = create<StoreState>()(
           id,
           type: 'randomPool',
           position,
-          data: { kind: 'randomPool', fileIds: [], volume: 0.8, loop: false, playing: false, fadeIn: 0, fadeOut: 0, pan: 0, panRandom: 0, pitchMin: 1, pitchMax: 1, duckTargets: [], duckAmount: 0.5, duckRelease: 1 },
+          data: { kind: 'randomPool', label: 'Random Pool', fileIds: [], volume: 0.8, loop: false, playing: false, fadeIn: 0, fadeOut: 0, pan: 0, panRandom: 0, pitchMin: 1, pitchMax: 1, duckTargets: [], duckAmount: 0.5, duckRelease: 1 },
         };
         const autoEdge: ProjectEdge = { id: `edge-${id}-${MASTER_NODE_ID}`, source: id, target: MASTER_NODE_ID };
         set((s) => ({ project: { ...s.project, nodes: [...s.project.nodes, newNode], edges: [...s.project.edges, autoEdge] } }));
+        return id;
+      },
+
+      addYouTubeNode: (position) => {
+        const id = `yt-${makeId()}`;
+        const newNode: ProjectNode = {
+          id,
+          type: 'youtube',
+          position,
+          data: { kind: 'youtube', videoId: null, title: '', playing: false, volume: 0.8 } as YouTubeNodeData,
+        };
+        set((s) => ({ project: { ...s.project, nodes: [...s.project.nodes, newNode] } }));
         return id;
       },
 
@@ -190,7 +211,7 @@ export const useStore = create<StoreState>()(
             if (member.data.kind === 'sound') {
               data = { ...member.data, playing: false, fileId: member.data.fileId ? (fileIdMap.get(member.data.fileId) ?? null) : null };
             } else {
-              data = { ...member.data, playing: false, fileIds: member.data.fileIds.map((fid) => fileIdMap.get(fid) ?? fid) };
+              data = { ...member.data, label: member.data.label ?? 'Random Pool', playing: false, fileIds: member.data.fileIds.map((fid) => fileIdMap.get(fid) ?? fid) };
             }
 
             newNodes.push({ id: memberId, type: member.data.kind === 'sound' ? 'sound' : 'randomPool', position: memberPos, data });
@@ -226,6 +247,36 @@ export const useStore = create<StoreState>()(
             edges: s.project.edges.filter((e) => e.source !== id && e.target !== id),
           },
         })),
+
+      removeGroupReconnect: (id) =>
+        set((s) => {
+          const memberIds = s.project.edges.filter((e) => e.target === id).map((e) => e.source);
+          const newEdges = s.project.edges.filter((e) => e.source !== id && e.target !== id);
+          const reconnectEdges = memberIds.map((mid) => ({
+            id: `edge-${mid}-${MASTER_NODE_ID}`,
+            source: mid,
+            target: MASTER_NODE_ID,
+          }));
+          return {
+            project: {
+              ...s.project,
+              nodes: s.project.nodes.filter((n) => n.id !== id),
+              edges: [...newEdges, ...reconnectEdges],
+            },
+          };
+        }),
+
+      removeGroupWithMembers: (id) =>
+        set((s) => {
+          const memberIds = new Set(s.project.edges.filter((e) => e.target === id).map((e) => e.source));
+          return {
+            project: {
+              ...s.project,
+              nodes: s.project.nodes.filter((n) => n.id !== id && !memberIds.has(n.id)),
+              edges: s.project.edges.filter((e) => e.source !== id && e.target !== id && !memberIds.has(e.source)),
+            },
+          };
+        }),
 
       addEdge: (edge) =>
         set((s) => ({

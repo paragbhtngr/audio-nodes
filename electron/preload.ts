@@ -14,8 +14,14 @@ contextBridge.exposeInMainWorld('audioNodes', {
   pickAudioFiles: (): Promise<string[]> =>
     ipcRenderer.invoke('dialog:pickAudioFiles'),
 
+  pickFolder: (): Promise<Array<{ path: string; name: string; folder: string }>> =>
+    ipcRenderer.invoke('dialog:pickFolder'),
+
   showSaveDialog: (defaultName: string): Promise<string | null> =>
     ipcRenderer.invoke('dialog:showSaveDialog', defaultName),
+
+  showMessageBox: (opts: { title: string; message: string; buttons: string[] }): Promise<number> =>
+    ipcRenderer.invoke('dialog:showMessageBox', opts),
 
   showOpenDialog: (): Promise<string | null> =>
     ipcRenderer.invoke('dialog:showOpenDialog'),
@@ -55,4 +61,7 @@ contextBridge.exposeInMainWorld('audioNodes', {
     ipcRenderer.on('hotkey:triggered', handler);
     return () => ipcRenderer.removeListener('hotkey:triggered', handler);
   },
+
+  youtubeSearch: (query: string): Promise<Array<{ videoId: string; title: string }>> =>
+    ipcRenderer.invoke('youtube:search', query),
 });

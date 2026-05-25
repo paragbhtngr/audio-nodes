@@ -21,6 +21,7 @@ import { SoundNode } from '../components/nodes/SoundNode';
 import { GroupNode } from '../components/nodes/GroupNode';
 import { RandomPoolNode } from '../components/nodes/RandomPoolNode';
 import { EffectNode } from '../components/nodes/EffectNode';
+import { YouTubeNode } from '../components/nodes/YouTubeNode';
 import { usePrefabStore } from '../state/prefabStore';
 import { useRecentStore } from '../state/recentStore';
 import { audioEngine } from '../audio/engine';
@@ -28,7 +29,7 @@ import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
 import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData, EffectType, Scene } from '../types';
 
-const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode, randomPool: RandomPoolNode, effect: EffectNode };
+const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode, randomPool: RandomPoolNode, effect: EffectNode, youtube: YouTubeNode };
 
 function formatDuration(s: number) {
   const m = Math.floor(s / 60);
@@ -90,7 +91,7 @@ async function deserializeProject(json: string, projectPath: string): Promise<ob
 
 function Canvas() {
   const project = useStore((s) => s.project);
-  const { addSoundNode, addGroupNode, addRandomPoolNode, addEffectNode, addAudioFile, instantiatePrefab, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, updateNodePosition, selectNode } = useStore((s) => s);
+  const { addSoundNode, addGroupNode, addRandomPoolNode, addEffectNode, addYouTubeNode, addAudioFile, instantiatePrefab, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, removeNode: storeRemoveNode, removeGroupReconnect, removeGroupWithMembers, updateNodePosition, selectNode } = useStore((s) => s);
   const { screenToFlowPosition } = useReactFlow();
 
   const hiddenIds = collapsedHiddenIds(project);
@@ -149,6 +150,30 @@ function Canvas() {
       changes.forEach((c) => { if (c.type === 'remove') storeRemoveEdge(c.id); });
     },
     [onEdgesChange, storeRemoveEdge]
+  );
+
+  const onBeforeDelete = useCallback(
+    async ({ nodes: toDelete }: { nodes: Node[]; edges: Edge[] }) => {
+      const groupNodes = toDelete.filter((n) => n.type === 'group');
+      for (const group of groupNodes) {
+        const memberIds = useStore.getState().project.edges
+          .filter((e) => e.target === group.id).map((e) => e.source);
+        if (memberIds.length === 0) { storeRemoveNode(group.id); continue; }
+        const data = group.data as { label?: string };
+        const choice = await window.audioNodes.showMessageBox({
+          title: 'Delete Group',
+          message: `"${data.label ?? 'Group'}" has ${memberIds.length} connected sound${memberIds.length !== 1 ? 's' : ''}. What should happen to them?`,
+          buttons: ['Reconnect to Master', 'Delete Sounds', 'Cancel'],
+        });
+        if (choice === 0) removeGroupReconnect(group.id);
+        else if (choice === 1) removeGroupWithMembers(group.id);
+        // choice === 2 (Cancel) — do nothing
+      }
+      // Handle non-group nodes normally
+      toDelete.filter((n) => n.type !== 'group').forEach((n) => storeRemoveNode(n.id));
+      return false; // we handled store updates ourselves; tell RF not to apply its own deletion
+    },
+    [storeRemoveNode, removeGroupReconnect, removeGroupWithMembers]
   );
 
   const onNodeDragStop = useCallback(
@@ -238,6 +263,11 @@ function Canvas() {
     addNodeToCanvas(id);
   }, [addEffectNode, addNodeToCanvas]);
 
+  const addYT = useCallback(() => {
+    const id = addYouTubeNode({ x: 300, y: 200 });
+    addNodeToCanvas(id);
+  }, [addYouTubeNode, addNodeToCanvas]);
+
   return (
     <div className="canvas-wrapper">
       <div className="canvas-toolbar">
@@ -250,6 +280,7 @@ function Canvas() {
           <option value="lowpass">Low Pass</option>
           <option value="highpass">High Pass</option>
         </select>
+        <button className="an-btn" onClick={addYT}>+ YouTube</button>
       </div>
       <div className="canvas">
       <ReactFlow
@@ -263,6 +294,7 @@ function Canvas() {
         onNodeClick={onNodeClick}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        onBeforeDelete={onBeforeDelete}
         fitView
       >
         <Background gap={16} />
@@ -448,6 +480,29 @@ function PrefabsPanel() {
   );
 }
 
+function LibraryFolderGroup({ folder, files }: { folder: string; files: AudioFile[] }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const removeFolder = useStore((s) => s.removeFolder);
+  const label = folder.split('/').join(' / ');
+  return (
+    <li className="library-folder-group">
+      <div className="library-folder__header-row">
+        <button className="library-folder__header" onClick={() => setCollapsed((c) => !c)}>
+          <span className="library-folder__chevron">{collapsed ? '▶' : '▼'}</span>
+          <span className="library-folder__name" title={folder}>{label}</span>
+          <span className="library-folder__count">{files.length}</span>
+        </button>
+        <button className="library-item__remove" onClick={() => removeFolder(folder)} title="Remove folder">×</button>
+      </div>
+      {!collapsed && (
+        <ul className="library-list library-folder__children">
+          {files.map((file) => <LibraryItem key={file.id} file={file} />)}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 function LibraryPanel() {
   const library = useStore((s) => s.project.library);
   const addAudioFile = useStore((s) => s.addAudioFile);
@@ -456,27 +511,52 @@ function LibraryPanel() {
     if (!window.audioNodes) return;
     const paths = await window.audioNodes.pickAudioFiles();
     for (const filePath of paths) {
+      if (library.some((f) => f.path === filePath)) continue;
       const name = filePath.split('/').pop()?.replace(/\.[^.]+$/, '') ?? filePath;
-      const file: AudioFile = {
-        id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        path: filePath,
-        name,
-      };
-      addAudioFile(file);
+      addAudioFile({ id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, path: filePath, name });
     }
   };
+
+  const pickFolder = async () => {
+    if (!window.audioNodes) return;
+    const entries = await window.audioNodes.pickFolder();
+    for (const entry of entries) {
+      if (library.some((f) => f.path === entry.path)) continue;
+      addAudioFile({
+        id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        path: entry.path,
+        name: entry.name,
+        folder: entry.folder,
+      });
+    }
+  };
+
+  const ungrouped = library.filter((f) => f.folder === undefined);
+  const byFolder = new Map<string, AudioFile[]>();
+  for (const file of library) {
+    if (file.folder !== undefined) {
+      const arr = byFolder.get(file.folder) ?? [];
+      arr.push(file);
+      byFolder.set(file.folder, arr);
+    }
+  }
+  const sortedFolders = [...byFolder.keys()].sort();
 
   return (
     <aside className="sidebar">
       <h2>Library</h2>
-      <button className="an-btn an-btn--primary sidebar__add" onClick={pickFiles}>
-        + Add Files
-      </button>
+      <div className="sidebar__add-row">
+        <button className="an-btn an-btn--primary sidebar__add-btn" onClick={pickFiles}>+ Files</button>
+        <button className="an-btn sidebar__add-btn" onClick={pickFolder}>Open Folder</button>
+      </div>
       {library.length === 0 && (
         <p className="hint">Add audio files, then drag them onto the canvas.</p>
       )}
       <ul className="library-list">
-        {library.map((file) => <LibraryItem key={file.id} file={file} />)}
+        {ungrouped.map((file) => <LibraryItem key={file.id} file={file} />)}
+        {sortedFolders.map((folder) => (
+          <LibraryFolderGroup key={folder} folder={folder} files={byFolder.get(folder)!} />
+        ))}
       </ul>
       <PrefabsPanel />
       <ScenesPanel />

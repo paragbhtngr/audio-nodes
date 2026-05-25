@@ -3,6 +3,7 @@ export interface AudioFile {
   path: string;
   name: string;
   duration?: number;
+  folder?: string; // relative path from import root, e.g. "Sounds/Ambience"; undefined = individually added
 }
 
 export interface SoundNodeData {
@@ -38,6 +39,7 @@ export interface GroupNodeData {
 
 export interface RandomPoolNodeData {
   kind: 'randomPool';
+  label: string;
   fileIds: string[];
   volume: number;
   loop: boolean;
@@ -70,11 +72,19 @@ export interface Scene {
   groupStates: Array<{ groupId: string; volume: number; active: boolean }>;
 }
 
-export type AudioNodeData = SoundNodeData | MasterNodeData | GroupNodeData | RandomPoolNodeData | EffectNodeData;
+export interface YouTubeNodeData {
+  kind: 'youtube';
+  videoId: string | null;
+  title: string;
+  playing: boolean;
+  volume: number;
+}
+
+export type AudioNodeData = SoundNodeData | MasterNodeData | GroupNodeData | RandomPoolNodeData | EffectNodeData | YouTubeNodeData;
 
 export interface ProjectNode {
   id: string;
-  type: 'sound' | 'master' | 'group' | 'randomPool' | 'effect';
+  type: 'sound' | 'master' | 'group' | 'randomPool' | 'effect' | 'youtube';
   position: { x: number; y: number };
   data: AudioNodeData;
 }

@@ -105,33 +105,94 @@ ipcMain.handle('fs:readFile', async (_, filePath: string) => {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 });
 
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus']);
+
+async function scanFolderForAudio(
+  rootParentDir: string,
+  dir: string
+): Promise<Array<{ path: string; name: string; folder: string }>> {
+  const results: Array<{ path: string; name: string; folder: string }> = [];
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  const folder = path.relative(rootParentDir, dir);
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...await scanFolderForAudio(rootParentDir, fullPath));
+    } else if (entry.isFile()) {
+      const ext = path.extname(entry.name).slice(1).toLowerCase();
+      if (AUDIO_EXTENSIONS.has(ext)) {
+        results.push({ path: fullPath, name: entry.name.replace(/\.[^.]+$/, ''), folder });
+      }
+    }
+  }
+  return results;
+}
+
+ipcMain.handle('dialog:pickFolder', async () => {
+  if (!mainWindow) return [];
+  clearHotkeys();
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Open Sound Folder',
+    properties: ['openDirectory'],
+  });
+  applyHotkeys();
+  if (result.canceled || result.filePaths.length === 0) return [];
+  const rootDir = result.filePaths[0];
+  return scanFolderForAudio(path.dirname(rootDir), rootDir);
+});
+
 ipcMain.handle('dialog:pickAudioFiles', async () => {
   if (!mainWindow) return [];
+  clearHotkeys();
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Add Audio Files',
     properties: ['openFile', 'multiSelections'],
     filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus'] }],
   });
+  applyHotkeys();
   return result.canceled ? [] : result.filePaths;
 });
 
 ipcMain.handle('dialog:showSaveDialog', async (_, defaultName: string) => {
   if (!mainWindow) return null;
+  clearHotkeys();
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Save Project',
     defaultPath: defaultName,
     filters: [{ name: 'Audio Nodes Project', extensions: ['anodes'] }],
   });
+  applyHotkeys();
   return result.canceled ? null : result.filePath;
+});
+
+ipcMain.handle('dialog:showMessageBox', async (_, opts: { title: string; message: string; buttons: string[] }) => {
+  if (!mainWindow) return 0;
+  clearHotkeys();
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    title: opts.title,
+    message: opts.message,
+    buttons: opts.buttons,
+    cancelId: opts.buttons.length - 1,
+  });
+  applyHotkeys();
+  return result.response;
 });
 
 ipcMain.handle('dialog:showOpenDialog', async () => {
   if (!mainWindow) return null;
+  clearHotkeys();
   const result = await dialog.showOpenDialog(mainWindow!, {
     title: 'Open Project',
     properties: ['openFile'],
     filters: [{ name: 'Audio Nodes Project', extensions: ['anodes'] }],
   });
+  applyHotkeys();
   return result.canceled ? null : result.filePaths[0];
 });
 
@@ -165,6 +226,38 @@ ipcMain.handle('path:relativize', (_evt, projectPath: string, filePath: string) 
 ipcMain.handle('path:absolutize', (_evt, projectPath: string, relPath: string) =>
   path.resolve(path.dirname(projectPath), relPath)
 );
+
+ipcMain.handle('youtube:search', async (_evt, query: string) => {
+  const res = await fetch('https://www.youtube.com/youtubei/v1/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en' } },
+      query,
+      params: 'EgIQAQ==', // videos only
+    }),
+  });
+  const data = await res.json() as Record<string, unknown>;
+  const results: Array<{ videoId: string; title: string }> = [];
+  try {
+    type Section = { itemSectionRenderer?: { contents: Item[] } };
+    type Item = { videoRenderer?: { videoId: string; title: { runs: { text: string }[] } } };
+    const sections = (
+      (data.contents as Record<string, unknown>)
+        ?.twoColumnSearchResultsRenderer as Record<string, unknown>
+    )?.primaryContents as Record<string, unknown>;
+    const list = (sections?.sectionListRenderer as Record<string, unknown>)?.contents as Section[] ?? [];
+    for (const section of list) {
+      for (const item of section.itemSectionRenderer?.contents ?? []) {
+        const vr = item.videoRenderer;
+        if (vr?.videoId) results.push({ videoId: vr.videoId, title: vr.title?.runs?.[0]?.text ?? '' });
+        if (results.length >= 8) break;
+      }
+      if (results.length >= 8) break;
+    }
+  } catch { /* ignore parse errors */ }
+  return results;
+});
 
 let currentHotkeys: Record<string, string> = {};
 const registeredKeys = new Set<string>();
