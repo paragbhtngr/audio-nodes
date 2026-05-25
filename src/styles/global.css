@@ -447,10 +447,7 @@ body,
   padding: 1px 5px;
   font-size: 10px;
   color: #bb9af7;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
 }
 
 .an-node--sound.selected,
