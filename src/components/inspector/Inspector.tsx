@@ -331,8 +331,8 @@ function SavePrefabButton({ groupId }: { groupId: string }) {
     const fileIds = new Set<string>();
     const members = memberEdges.flatMap((e) => {
       const m = project.nodes.find((n) => n.id === e.source);
-      if (!m || (m.type !== 'sound' && m.type !== 'randomPool')) return [];
-      const d = m.data as import('../../types').SoundNodeData | import('../../types').RandomPoolNodeData;
+      if (!m || (m.type !== 'sound' && m.type !== 'randomPool' && m.type !== 'youtube')) return [];
+      const d = m.data as import('../../types').SoundNodeData | import('../../types').RandomPoolNodeData | import('../../types').YouTubeNodeData;
       if (d.kind === 'sound' && d.fileId) fileIds.add(d.fileId);
       if (d.kind === 'randomPool') d.fileIds.forEach((fid) => fileIds.add(fid));
       return [{ data: d, relativePosition: { x: m.position.x - groupPos.x, y: m.position.y - groupPos.y } }];

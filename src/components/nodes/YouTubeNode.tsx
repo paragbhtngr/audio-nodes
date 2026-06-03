@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useEffect, useRef } from 'react';
 import { useStore } from '../../state/store';
-import type { YouTubeNodeData } from '../../types';
+import type { GroupNodeData, YouTubeNodeData } from '../../types';
 
 // Minimal YT IFrame API types
 interface YTPlayer {
@@ -54,6 +54,13 @@ export function YouTubeNode({ id }: NodeProps) {
     const node = s.project.nodes.find((n) => n.id === id);
     return node?.data as YouTubeNodeData | undefined;
   });
+  const groupVolume = useStore((s) => {
+    const edge = s.project.edges.find((e) => e.source === id);
+    if (!edge) return 1;
+    const target = s.project.nodes.find((n) => n.id === edge.target);
+    if (!target || target.type !== 'group') return 1;
+    return (target.data as GroupNodeData).volume;
+  });
   const updateNodeData = useStore((s) => s.updateNodeData);
   const removeNode = useStore((s) => s.removeNode);
 
@@ -77,7 +84,7 @@ export function YouTubeNode({ id }: NodeProps) {
         height: '1', width: '1', videoId,
         playerVars: { autoplay: 0, controls: 0 },
         events: {
-          onReady: (e) => e.target.setVolume(Math.round((data?.volume ?? 0.8) * 100)),
+          onReady: (e) => e.target.setVolume(Math.round((data?.volume ?? 0.8) * groupVolume * 100)),
           onStateChange: (e) => {
             if (window.YT && e.data === window.YT.PlayerState.ENDED) {
               if (loopRef.current) {
@@ -107,8 +114,8 @@ export function YouTubeNode({ id }: NodeProps) {
   }, [data?.playing]);
 
   useEffect(() => {
-    playerRef.current?.setVolume(Math.round((data?.volume ?? 0.8) * 100));
-  }, [data?.volume]);
+    playerRef.current?.setVolume(Math.round((data?.volume ?? 0.8) * groupVolume * 100));
+  }, [data?.volume, groupVolume]);
 
   if (!data) return null;
 

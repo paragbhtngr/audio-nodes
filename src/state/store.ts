@@ -205,17 +205,21 @@ export const useStore = create<StoreState>()(
           ];
 
           for (const member of prefab.members) {
-            const memberId = `${member.data.kind === 'sound' ? 'sound' : 'pool'}-${makeId()}`;
+            const kindToType = { sound: 'sound', randomPool: 'randomPool', youtube: 'youtube' } as const;
+            const kindToPrefix = { sound: 'sound', randomPool: 'pool', youtube: 'yt' } as const;
+            const memberId = `${kindToPrefix[member.data.kind]}-${makeId()}`;
             const memberPos = { x: position.x + member.relativePosition.x, y: position.y + member.relativePosition.y };
 
             let data: AudioNodeData;
             if (member.data.kind === 'sound') {
               data = { ...member.data, playing: false, fileId: member.data.fileId ? (fileIdMap.get(member.data.fileId) ?? null) : null };
-            } else {
+            } else if (member.data.kind === 'randomPool') {
               data = { ...member.data, label: member.data.label ?? 'Random Pool', playing: false, fileIds: member.data.fileIds.map((fid) => fileIdMap.get(fid) ?? fid) };
+            } else {
+              data = { ...member.data, playing: false };
             }
 
-            newNodes.push({ id: memberId, type: member.data.kind === 'sound' ? 'sound' : 'randomPool', position: memberPos, data });
+            newNodes.push({ id: memberId, type: kindToType[member.data.kind], position: memberPos, data });
             newEdges.push({ id: `edge-${memberId}-${groupId}`, source: memberId, target: groupId });
           }
 

@@ -5,6 +5,8 @@ interface Track {
   gain: GainNode;
   panner: StereoPannerNode;
   source: AudioBufferSourceNode | null;
+  startTime: number;
+  bufferDuration: number;
 }
 
 interface EffectProcessor {
@@ -162,7 +164,7 @@ class AudioEngine {
         gain.gain.value = data.volume;
         panner.pan.value = data.pan;
         gain.connect(panner);
-        this.tracks.set(node.id, { gain, panner, source: null });
+        this.tracks.set(node.id, { gain, panner, source: null, startTime: 0, bufferDuration: 0 });
       }
       const track = this.tracks.get(node.id)!;
       track.gain.gain.setTargetAtTime(data.volume, ctx.currentTime, 0.05);
@@ -394,6 +396,8 @@ class AudioEngine {
     const launch = () => {
       this.applyDucking(data);
       source.start(0);
+      track.startTime = ctx.currentTime;
+      track.bufferDuration = buffer.duration;
       track.source = source;
       source.onended = () => {
         if (track.source !== source) return;
@@ -417,6 +421,14 @@ class AudioEngine {
     } else {
       launch();
     }
+  }
+
+  getProgress(nodeId: string): { elapsed: number; duration: number } | null {
+    const ctx = this.ctx;
+    if (!ctx) return null;
+    const track = this.tracks.get(nodeId);
+    if (!track?.source || track.bufferDuration <= 0) return null;
+    return { elapsed: ctx.currentTime - track.startTime, duration: track.bufferDuration };
   }
 
   private stopTrack(nodeId: string, fadeOut = 0) {

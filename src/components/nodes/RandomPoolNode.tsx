@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
 import type { RandomPoolNodeData } from '../../types';
@@ -11,7 +12,21 @@ export function RandomPoolNode({ id }: NodeProps) {
   const updateNodeData = useStore((s) => s.updateNodeData);
   const removeNode = useStore((s) => s.removeNode);
 
+  const [editingLabel, setEditingLabel] = useState(false);
+  const [draft, setDraft] = useState('');
+  const labelRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingLabel) labelRef.current?.select();
+  }, [editingLabel]);
+
   if (!data) return null;
+
+  const commitLabel = () => {
+    const trimmed = draft.trim();
+    if (trimmed) updateNodeData(id, { label: trimmed });
+    setEditingLabel(false);
+  };
 
   const files = data.fileIds.map((fid) => library.find((f) => f.id === fid)).filter(Boolean) as typeof library;
 
@@ -32,7 +47,28 @@ export function RandomPoolNode({ id }: NodeProps) {
   return (
     <div className="an-node an-node--pool">
       <div className="an-node__header">
-        <span>Random Pool</span>
+        {editingLabel ? (
+          <input
+            ref={labelRef}
+            className="an-node__label-input an-node__label-input--pool nodrag"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitLabel}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitLabel();
+              if (e.key === 'Escape') setEditingLabel(false);
+              e.stopPropagation();
+            }}
+          />
+        ) : (
+          <span
+            className="an-node__label-text"
+            title="Double-click to rename"
+            onDoubleClick={() => { setDraft(data.label ?? 'Random Pool'); setEditingLabel(true); }}
+          >
+            {data.label ?? 'Random Pool'}
+          </span>
+        )}
         <button className="an-node__delete" onClick={() => removeNode(id)} title="Remove">×</button>
       </div>
 

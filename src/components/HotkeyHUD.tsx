@@ -1,5 +1,5 @@
 import { useStore } from '../state/store';
-import type { SoundNodeData } from '../types';
+import type { GroupNodeData, RandomPoolNodeData, SoundNodeData, YouTubeNodeData } from '../types';
 
 export function HotkeyHUD() {
   const hotkeys = useStore((s) => s.project.hotkeys);
@@ -15,9 +15,31 @@ export function HotkeyHUD() {
 
   const trigger = (nodeId: string) => {
     const node = nodes.find((n) => n.id === nodeId);
-    if (!node || node.type !== 'sound') return;
-    const data = node.data as SoundNodeData;
-    updateNodeData(nodeId, { playing: !data.playing });
+    if (!node) return;
+    if (node.type === 'sound' || node.type === 'randomPool' || node.type === 'youtube') {
+      const data = node.data as SoundNodeData | RandomPoolNodeData | YouTubeNodeData;
+      updateNodeData(nodeId, { playing: !data.playing });
+    }
+  };
+
+  const getNodeName = (node: (typeof nodes)[number]): string => {
+    if (node.type === 'group') return (node.data as GroupNodeData).label ?? 'Group';
+    if (node.type === 'randomPool') return (node.data as RandomPoolNodeData).label ?? 'Random Pool';
+    if (node.type === 'youtube') return (node.data as YouTubeNodeData).title || 'YouTube';
+    if (node.type === 'sound') {
+      const d = node.data as SoundNodeData;
+      return d.fileId
+        ? useStore.getState().project.library.find((f) => f.id === d.fileId)?.name ?? 'Sound'
+        : 'Sound';
+    }
+    return node.type;
+  };
+
+  const isPlaying = (node: (typeof nodes)[number]): boolean => {
+    if (node.type === 'sound' || node.type === 'randomPool' || node.type === 'youtube') {
+      return (node.data as SoundNodeData | RandomPoolNodeData | YouTubeNodeData).playing;
+    }
+    return false;
   };
 
   return (
@@ -25,20 +47,18 @@ export function HotkeyHUD() {
       <div className="hud__title">Hotkeys</div>
       <ul className="hud__list">
         {entries.map(({ key, node }) => {
-          const data = node.data as SoundNodeData;
-          const name = node.type === 'sound' && data.fileId
-            ? useStore.getState().project.library.find((f) => f.id === data.fileId)?.name ?? 'Sound'
-            : 'Sound';
+          const name = getNodeName(node);
+          const playing = isPlaying(node);
           return (
             <li key={key} className="hud__item">
               <kbd className="hud__key">{key.replace('CmdOrCtrl', '⌘')}</kbd>
               <span className="hud__name">{name}</span>
               <button
-                className={`hud__trigger ${data.playing ? 'hud__trigger--active' : ''}`}
+                className={`hud__trigger ${playing ? 'hud__trigger--active' : ''}`}
                 onClick={() => trigger(node.id)}
-                title={data.playing ? 'Stop' : 'Play'}
+                title={playing ? 'Stop' : 'Play'}
               >
-                {data.playing ? '■' : '▶'}
+                {playing ? '■' : '▶'}
               </button>
             </li>
           );

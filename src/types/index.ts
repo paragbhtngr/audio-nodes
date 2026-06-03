@@ -94,7 +94,7 @@ export interface Prefab {
   id: string;
   groupData: GroupNodeData;
   members: Array<{
-    data: SoundNodeData | RandomPoolNodeData;
+    data: SoundNodeData | RandomPoolNodeData | YouTubeNodeData;
     relativePosition: { x: number; y: number };
   }>;
   library: AudioFile[];

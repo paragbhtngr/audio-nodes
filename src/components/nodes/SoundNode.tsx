@@ -1,4 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { useEffect, useState } from 'react';
+import { audioEngine } from '../../audio/engine';
 import { useStore } from '../../state/store';
 import type { SoundNodeData } from '../../types';
 
@@ -11,6 +13,23 @@ export function SoundNode({ id }: NodeProps) {
   const isMissing = useStore((s) => data?.fileId != null && s.missingFileIds.has(data.fileId));
   const updateNodeData = useStore((s) => s.updateNodeData);
   const removeNode = useStore((s) => s.removeNode);
+
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!data?.playing) { setProgress(0); return; }
+    let raf: number;
+    const tick = () => {
+      const p = audioEngine.getProgress(id);
+      if (p && p.duration > 0) {
+        const ratio = p.elapsed / p.duration;
+        setProgress(data.loop ? ratio % 1 : Math.min(1, ratio));
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [data?.playing, data?.loop, id]);
 
   if (!data) return null;
 
@@ -32,6 +51,9 @@ export function SoundNode({ id }: NodeProps) {
         >
           ×
         </button>
+      </div>
+      <div className="an-node__progress">
+        <div className="an-node__progress-fill" style={{ width: `${progress * 100}%` }} />
       </div>
       <div className="an-node__body">
         <div className="an-node__row">
