@@ -89,10 +89,10 @@ export function GroupNode({ id }: NodeProps) {
         ) : (
           <span
             className="an-node__label-text"
-            title="Double-click to rename"
+            title={data.label.length > 40 ? data.label : 'Double-click to rename'}
             onDoubleClick={() => { setDraft(data.label); setEditingLabel(true); }}
           >
-            {data.label}
+            {data.label.length > 40 ? data.label.slice(0, 40) + '…' : data.label}
           </span>
         )}
 
@@ -132,6 +132,7 @@ export function GroupNode({ id }: NodeProps) {
                   key={n.id}
                   className="an-node__member-chip"
                   style={{ borderColor: `${data.color}55`, background: `${data.color}15`, color: data.color }}
+                  title={memberName(n)}
                 >
                   {memberName(n)}
                 </span>

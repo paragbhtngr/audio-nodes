@@ -57,8 +57,15 @@ body,
   width: 260px;
   border-right: 1px solid var(--border);
   background: var(--panel);
-  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar__scroll {
+  flex: 1;
   overflow-y: auto;
+  padding: 12px;
 }
 
 .sidebar h2 {
@@ -352,6 +359,7 @@ body,
 .an-node--group {
   border-color: #bb9af7;
   min-width: 200px;
+  max-width: 240px;
 }
 
 .an-node--group .an-node__header {
@@ -447,7 +455,10 @@ body,
   padding: 1px 5px;
   font-size: 10px;
   color: #bb9af7;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .an-node--sound.selected,
@@ -482,6 +493,21 @@ body,
 
 .an-node--master .an-node__header {
   color: var(--accent);
+}
+
+.an-node--sound {
+  max-width: 240px;
+}
+
+.an-node--sound .an-node__header {
+  align-items: flex-start;
+}
+
+.an-node__filename {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .an-node__delete {
@@ -905,6 +931,7 @@ body,
 .an-node--youtube {
   border-color: #ff4444;
   min-width: 200px;
+  max-width: 240px;
 }
 
 .an-node--youtube .an-node__header {
@@ -920,9 +947,8 @@ body,
 .an-node__yt-title {
   font-size: 12px;
   color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
   margin-bottom: 2px;
 }
 
@@ -1056,4 +1082,59 @@ body,
 
 .library-folder__header-row:hover .library-item__remove {
   opacity: 1;
+}
+
+/* Now Playing panel */
+.now-playing {
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--panel);
+}
+
+.now-playing__header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.now-playing__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.now-playing__stop {
+  background: none;
+  border: none;
+  color: #f7768e;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.now-playing__stop:hover {
+  background: rgba(247, 118, 142, 0.15);
+}
+
+.now-playing__name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.now-playing__vol {
+  width: 60px;
+  flex-shrink: 0;
 }

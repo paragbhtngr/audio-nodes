@@ -27,7 +27,7 @@ import { useRecentStore } from '../state/recentStore';
 import { audioEngine } from '../audio/engine';
 import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
-import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData, EffectType, Scene } from '../types';
+import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData, RandomPoolNodeData, YouTubeNodeData, EffectType, Scene } from '../types';
 
 const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode, randomPool: RandomPoolNode, effect: EffectNode, youtube: YouTubeNode };
 
@@ -503,6 +503,55 @@ function LibraryFolderGroup({ folder, files }: { folder: string; files: AudioFil
   );
 }
 
+function NowPlayingPanel() {
+  const nodes = useStore((s) => s.project.nodes);
+  const library = useStore((s) => s.project.library);
+  const updateNodeData = useStore((s) => s.updateNodeData);
+
+  const playing = nodes.filter(
+    (n) => (n.type === 'sound' || n.type === 'randomPool' || n.type === 'youtube') &&
+      (n.data as { playing?: boolean }).playing
+  );
+
+  if (playing.length === 0) return null;
+
+  const getName = (n: typeof nodes[number]): string => {
+    if (n.type === 'youtube') return (n.data as YouTubeNodeData).title || 'YouTube';
+    if (n.type === 'randomPool') return (n.data as RandomPoolNodeData).label ?? 'Random Pool';
+    const d = n.data as SoundNodeData;
+    return d.fileId ? (library.find((f) => f.id === d.fileId)?.name ?? 'Sound') : 'Sound';
+  };
+
+  return (
+    <div className="now-playing">
+      <div className="now-playing__header">Now Playing</div>
+      {playing.map((n) => {
+        const data = n.data as SoundNodeData | RandomPoolNodeData | YouTubeNodeData;
+        return (
+          <div key={n.id} className="now-playing__item">
+            <span className="now-playing__name" title={getName(n)}>{getName(n)}</span>
+            <input
+              type="range"
+              className="now-playing__vol nodrag"
+              min={0} max={1} step={0.01}
+              value={data.volume}
+              onChange={(e) => updateNodeData(n.id, { volume: parseFloat(e.target.value) })}
+              title={`${Math.round(data.volume * 100)}%`}
+            />
+            <button
+              className="now-playing__stop"
+              onClick={() => updateNodeData(n.id, { playing: false })}
+              title="Stop"
+            >
+              ■
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function LibraryPanel() {
   const library = useStore((s) => s.project.library);
   const addAudioFile = useStore((s) => s.addAudioFile);
@@ -544,22 +593,25 @@ function LibraryPanel() {
 
   return (
     <aside className="sidebar">
-      <h2>Library</h2>
-      <div className="sidebar__add-row">
-        <button className="an-btn an-btn--primary sidebar__add-btn" onClick={pickFiles}>+ Files</button>
-        <button className="an-btn sidebar__add-btn" onClick={pickFolder}>Open Folder</button>
+      <div className="sidebar__scroll">
+        <h2>Library</h2>
+        <div className="sidebar__add-row">
+          <button className="an-btn an-btn--primary sidebar__add-btn" onClick={pickFiles}>+ Files</button>
+          <button className="an-btn sidebar__add-btn" onClick={pickFolder}>Open Folder</button>
+        </div>
+        {library.length === 0 && (
+          <p className="hint">Add audio files, then drag them onto the canvas.</p>
+        )}
+        <ul className="library-list">
+          {ungrouped.map((file) => <LibraryItem key={file.id} file={file} />)}
+          {sortedFolders.map((folder) => (
+            <LibraryFolderGroup key={folder} folder={folder} files={byFolder.get(folder)!} />
+          ))}
+        </ul>
+        <PrefabsPanel />
+        <ScenesPanel />
       </div>
-      {library.length === 0 && (
-        <p className="hint">Add audio files, then drag them onto the canvas.</p>
-      )}
-      <ul className="library-list">
-        {ungrouped.map((file) => <LibraryItem key={file.id} file={file} />)}
-        {sortedFolders.map((folder) => (
-          <LibraryFolderGroup key={folder} folder={folder} files={byFolder.get(folder)!} />
-        ))}
-      </ul>
-      <PrefabsPanel />
-      <ScenesPanel />
+      <NowPlayingPanel />
     </aside>
   );
 }

@@ -43,7 +43,7 @@ export function SoundNode({ id }: NodeProps) {
     <div className="an-node an-node--sound">
       <div className="an-node__header">
         {isMissing && <span title="File not found" style={{ color: '#f7768e', marginRight: 4 }}>⚠</span>}
-        {file ? file.name : <span className="an-node__muted">No file</span>}
+        {file ? <span className="an-node__filename">{file.name}</span> : <span className="an-node__muted">No file</span>}
         <button
           className="an-node__delete"
           onClick={() => removeNode(id)}
