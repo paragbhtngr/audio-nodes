@@ -1,5 +1,5 @@
 {
-  "name": "audio-nodes",
+  "name": "foaly",
   "version": "0.1.0",
   "description": "Node-based ambient sound mixer for tabletop RPG game masters",
   "main": "dist-electron/main.js",
@@ -14,14 +14,23 @@
   "author": "",
   "license": "ISC",
   "build": {
-    "appId": "com.audionodes.app",
-    "productName": "Audio Nodes",
+    "appId": "com.foaly.app",
+    "productName": "Foaly",
+    "directories": {
+      "output": "release"
+    },
     "files": [
       "dist/**",
       "dist-electron/**"
     ],
     "mac": {
-      "category": "public.app-category.music"
+      "category": "public.app-category.music",
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico"
     }
   },
   "dependencies": {

@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
-import { EditView } from './views/EditView';
-import { audioEngine } from './audio/engine';
+import { useEffect } from "react";
+import { EditView } from "./views/EditView";
+import { audioEngine } from "./audio/engine";
 
 export function App() {
   useEffect(() => {
@@ -18,19 +18,17 @@ export function App() {
     const onFocusOut = (e: FocusEvent) => {
       if (isTextInput(e.target)) window.audioNodes.setHotkeysEnabled(true);
     };
-    document.addEventListener('focusin', onFocusIn);
-    document.addEventListener('focusout', onFocusOut);
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
     return () => {
-      document.removeEventListener('focusin', onFocusIn);
-      document.removeEventListener('focusout', onFocusOut);
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
     };
   }, []);
 
   return (
     <div className="app-root">
-      <header className="app-header">
-        <h1>Audio Nodes</h1>
-      </header>
+      <div className="titlebar-drag" />
       <main className="app-main">
         <EditView />
       </main>

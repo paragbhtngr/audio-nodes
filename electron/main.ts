@@ -8,6 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname, '..');
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist');
+const ICON_PATH = path.join(process.env.APP_ROOT, 'build',
+  process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+);
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -78,8 +81,10 @@ function createWindow() {
     height: 900,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#1a1a1a',
-    title: 'Audio Nodes',
+    backgroundColor: '#232323',
+    title: 'Foaly',
+    icon: ICON_PATH,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
@@ -164,7 +169,7 @@ ipcMain.handle('dialog:showSaveDialog', async (_, defaultName: string) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Save Project',
     defaultPath: defaultName,
-    filters: [{ name: 'Audio Nodes Project', extensions: ['anodes'] }],
+    filters: [{ name: 'Foaly Project', extensions: ['anodes'] }],
   });
   applyHotkeys();
   return result.canceled ? null : result.filePath;
@@ -190,7 +195,7 @@ ipcMain.handle('dialog:showOpenDialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     title: 'Open Project',
     properties: ['openFile'],
-    filters: [{ name: 'Audio Nodes Project', extensions: ['anodes'] }],
+    filters: [{ name: 'Foaly Project', extensions: ['anodes'] }],
   });
   applyHotkeys();
   return result.canceled ? null : result.filePaths[0];
@@ -313,7 +318,10 @@ ipcMain.handle('hotkeys:setEnabled', (_evt, enabled: boolean) => {
   else clearHotkeys();
 });
 
+app.setName('Foaly');
+
 app.whenReady().then(() => {
+  if (process.platform === 'darwin') app.dock?.setIcon(ICON_PATH);
   Menu.setApplicationMenu(buildMenu());
   createWindow();
 });
