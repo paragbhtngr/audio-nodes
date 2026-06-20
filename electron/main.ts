@@ -1,9 +1,15 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell, globalShortcut } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, globalShortcut, protocol, net } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Give the renderer a real origin so YouTube's iframe API works from production builds.
+// file:// has a null origin which YouTube rejects; app:// behaves like https://.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true } },
+]);
 
 process.env.APP_ROOT = path.join(__dirname, '..');
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
@@ -97,7 +103,7 @@ function createWindow() {
     mainWindow.loadURL(VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(RENDERER_DIST, 'index.html'));
+    mainWindow.loadURL('app://localhost/');
   }
 
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -321,6 +327,12 @@ ipcMain.handle('hotkeys:setEnabled', (_evt, enabled: boolean) => {
 app.setName('Foaly');
 
 app.whenReady().then(() => {
+  protocol.handle('app', (req) => {
+    const { pathname } = new URL(req.url);
+    const filePath = path.join(RENDERER_DIST, pathname === '/' ? 'index.html' : pathname);
+    return net.fetch('file://' + filePath);
+  });
+
   if (process.platform === 'darwin') app.dock?.setIcon(ICON_PATH);
   Menu.setApplicationMenu(buildMenu());
   createWindow();
