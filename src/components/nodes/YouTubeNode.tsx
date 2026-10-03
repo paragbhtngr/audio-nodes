@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../state/store';
+import { LoopButton, PlayButton } from './NodeControls';
 import type { GroupNodeData, YouTubeNodeData } from '../../types';
 
 // Minimal YT IFrame API types
@@ -9,6 +10,8 @@ interface YTPlayer {
   pauseVideo(): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   setVolume(v: number): void;
+  getCurrentTime(): number;
+  getDuration(): number;
   destroy(): void;
 }
 interface YTPlayerEvent { data: number }
@@ -67,6 +70,7 @@ export function YouTubeNode({ id }: NodeProps) {
   const playerRef = useRef<YTPlayer | null>(null);
   const loopRef = useRef(false);
   const playerDivId = `yt-player-${id}`;
+  const [progress, setProgress] = useState(0);
 
   // Keep loopRef in sync so the onStateChange closure sees the latest value
   useEffect(() => { loopRef.current = data?.loop ?? false; }, [data?.loop]);
@@ -117,20 +121,35 @@ export function YouTubeNode({ id }: NodeProps) {
     playerRef.current?.setVolume(Math.round((data?.volume ?? 0.8) * groupVolume * 100));
   }, [data?.volume, groupVolume]);
 
+  useEffect(() => {
+    if (!data?.playing) { setProgress(0); return; }
+    let raf: number;
+    const tick = () => {
+      const p = playerRef.current;
+      const duration = p?.getDuration?.() ?? 0;
+      if (p && duration > 0) {
+        setProgress(Math.min(1, p.getCurrentTime() / duration));
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [data?.playing]);
+
   if (!data) return null;
 
   return (
-    <div className="an-node an-node--youtube">
+    <div className={`an-node an-node--youtube${data.playing ? ' an-node--playing' : ''}`}>
       <div className="an-node__header">
-        <span className="an-node__yt-label">▶ YouTube</span>
+        {data.videoId
+          ? <span className="an-node__filename" title={data.title}>{data.title || 'Untitled'}</span>
+          : <span className="an-node__muted">No video — search in inspector</span>}
         <button className="an-node__delete" onClick={() => removeNode(id)} title="Remove node">×</button>
       </div>
+      <div className="an-node__progress">
+        <div className="an-node__progress-fill" style={{ width: `${progress * 100}%` }} />
+      </div>
       <div className="an-node__body">
-        {data.videoId ? (
-          <div className="an-node__yt-title" title={data.title}>{data.title || 'Untitled'}</div>
-        ) : (
-          <span className="an-node__muted" style={{ fontSize: 11 }}>No video — search in inspector</span>
-        )}
         <div className="an-node__row">
           <label className="an-node__label">Volume</label>
           <span className="an-node__value">{Math.round(data.volume * 100)}%</span>
@@ -141,15 +160,8 @@ export function YouTubeNode({ id }: NodeProps) {
           onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
         />
         <div className="an-node__row an-node__row--controls">
-          {data.loop && <span className="an-node__yt-loop-badge">↻</span>}
-          <button
-            className={`an-btn ${data.playing ? 'an-btn--stop' : 'an-btn--play'} nodrag`}
-            style={{ marginLeft: 'auto' }}
-            disabled={!data.videoId}
-            onClick={() => updateNodeData(id, { playing: !data.playing })}
-          >
-            {data.playing ? '■ Stop' : '▶ Play'}
-          </button>
+          <LoopButton active={data.loop} onClick={() => updateNodeData(id, { loop: !data.loop })} />
+          <PlayButton playing={data.playing} disabled={!data.videoId} onClick={() => updateNodeData(id, { playing: !data.playing })} />
         </div>
         {/* Hidden YT player element */}
         <div id={playerDivId} style={{ width: 1, height: 1, overflow: 'hidden', position: 'absolute' }} />

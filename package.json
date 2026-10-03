@@ -25,15 +25,32 @@
     ],
     "mac": {
       "category": "public.app-category.music",
-      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
       "icon": "build/icon.icns"
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.ico"
     }
   },
   "dependencies": {
+    "@fontsource/cormorant": "^5.3.0",
+    "@fontsource/cormorant-unicase": "^5.3.0",
     "@xyflow/react": "^12.10.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

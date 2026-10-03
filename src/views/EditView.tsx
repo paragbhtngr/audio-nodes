@@ -27,6 +27,7 @@ import { useRecentStore } from '../state/recentStore';
 import { audioEngine } from '../audio/engine';
 import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
+import { ThemePicker } from '../components/ThemePicker';
 import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData, RandomPoolNodeData, YouTubeNodeData, EffectType, Scene } from '../types';
 
 const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode, randomPool: RandomPoolNode, effect: EffectNode, youtube: YouTubeNode };
@@ -353,7 +354,7 @@ function LibraryItem({ file }: { file: AudioFile }) {
           className="library-item__name"
           title={isMissing ? 'File not found' : 'Click to rename'}
           onClick={() => { setDraft(file.name); setEditing(true); }}
-          style={isMissing ? { color: '#f7768e' } : undefined}
+          style={isMissing ? { color: 'var(--c-red)' } : undefined}
         >
           {isMissing && '⚠ '}{file.name}
           {file.duration != null && <span className="library-item__dur">{formatDuration(file.duration)}</span>}
@@ -610,6 +611,7 @@ function LibraryPanel() {
         </ul>
         <PrefabsPanel />
         <ScenesPanel />
+        <ThemePicker />
       </div>
       <NowPlayingPanel />
     </aside>

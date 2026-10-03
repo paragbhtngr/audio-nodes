@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useEffect, useState } from 'react';
 import { audioEngine } from '../../audio/engine';
 import { useStore } from '../../state/store';
+import { LoopButton, PlayButton } from './NodeControls';
 import type { SoundNodeData } from '../../types';
 
 export function SoundNode({ id }: NodeProps) {
@@ -40,9 +41,9 @@ export function SoundNode({ id }: NodeProps) {
   };
 
   return (
-    <div className="an-node an-node--sound">
+    <div className={`an-node an-node--sound${data.playing ? ' an-node--playing' : ''}`}>
       <div className="an-node__header">
-        {isMissing && <span title="File not found" style={{ color: '#f7768e', marginRight: 4 }}>⚠</span>}
+        {isMissing && <span title="File not found" style={{ color: 'var(--c-red)', marginRight: 4 }}>⚠</span>}
         {file ? <span className="an-node__filename">{file.name}</span> : <span className="an-node__muted">No file</span>}
         <button
           className="an-node__delete"
@@ -70,21 +71,8 @@ export function SoundNode({ id }: NodeProps) {
           onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
         />
         <div className="an-node__row an-node__row--controls">
-          <label className="an-node__check">
-            <input
-              type="checkbox"
-              checked={data.loop}
-              onChange={(e) => updateNodeData(id, { loop: e.target.checked })}
-            />
-            Loop
-          </label>
-          <button
-            className={`an-btn ${data.playing ? 'an-btn--stop' : 'an-btn--play'}`}
-            onClick={togglePlay}
-            disabled={!file}
-          >
-            {data.playing ? '■ Stop' : '▶ Play'}
-          </button>
+          <LoopButton active={data.loop} onClick={() => updateNodeData(id, { loop: !data.loop })} />
+          <PlayButton playing={data.playing} disabled={!file} onClick={togglePlay} />
         </div>
       </div>
       <Handle type="source" position={Position.Right} />

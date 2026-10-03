@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
+import { LoopButton, PlayButton } from './NodeControls';
 import type { RandomPoolNodeData } from '../../types';
 
 export function RandomPoolNode({ id }: NodeProps) {
@@ -90,24 +91,6 @@ export function RandomPoolNode({ id }: NodeProps) {
           )}
         </div>
 
-        <div className="an-node__row an-node__row--controls" style={{ marginTop: 6 }}>
-          <label className="an-node__check">
-            <input
-              type="checkbox"
-              checked={data.loop}
-              onChange={(e) => updateNodeData(id, { loop: e.target.checked })}
-            />
-            Loop
-          </label>
-          <button
-            className={`an-btn ${data.playing ? 'an-btn--stop' : 'an-btn--play'} nodrag`}
-            onClick={toggle}
-            disabled={data.fileIds.length === 0}
-          >
-            {data.playing ? '■ Stop' : '▶ Play'}
-          </button>
-        </div>
-
         <div className="an-node__row">
           <span className="an-node__label">Volume</span>
           <span className="an-node__value">{Math.round(data.volume * 100)}%</span>
@@ -119,6 +102,11 @@ export function RandomPoolNode({ id }: NodeProps) {
           value={data.volume}
           onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
         />
+
+        <div className="an-node__row an-node__row--controls">
+          <LoopButton active={data.loop} onClick={() => updateNodeData(id, { loop: !data.loop })} />
+          <PlayButton playing={data.playing} disabled={data.fileIds.length === 0} onClick={toggle} />
+        </div>
       </div>
 
       <Handle type="source" position={Position.Right} />

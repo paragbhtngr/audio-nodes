@@ -1,0 +1,287 @@
+/* Pip-Boy skin: green phosphor CRT, 80s terminal, Alien "Nostromo" console vibes.
+   Overrides the variables defined in global.css, then adds CRT effects on top. */
+
+:root[data-theme='pipboy'] {
+  --phosphor: #3dff7a;
+  --phosphor-dim: #1fa84c;
+  --phosphor-faint: #0e4d24;
+
+  --bg: #020a04;
+  --panel: #04120a;
+  --border: #12622d;
+  --text: var(--phosphor);
+  --muted: #1fa84c;
+  --accent: var(--phosphor);
+  --on-accent: #020a04;
+
+  /* Monochrome: node types differ by brightness, warnings go amber like Alien terminals */
+  --c-red: #ffb000;
+  --c-green: #7dffa3;
+  --c-purple: #b6ffcb;
+  --c-amber: #d6ff6a;
+  --c-cyan: #2ee6a6;
+  --c-yt: #ffb000;
+
+  --radius: 0px;
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', 'Courier New', monospace;
+  color-scheme: dark;
+}
+
+[data-theme='pipboy'] body {
+  letter-spacing: 0.3px;
+  text-shadow: 0 0 4px color-mix(in srgb, var(--phosphor) 55%, transparent);
+}
+
+[data-theme='pipboy'] * {
+  border-radius: 0 !important;
+}
+
+[data-theme='pipboy'] button,
+[data-theme='pipboy'] input,
+[data-theme='pipboy'] select,
+[data-theme='pipboy'] textarea {
+  font-family: inherit;
+}
+
+/* CRT overlay: scanlines + vignette, never intercepts clicks */
+[data-theme='pipboy'] body::before,
+[data-theme='pipboy'] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+[data-theme='pipboy'] body::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.28) 3px
+  );
+}
+
+[data-theme='pipboy'] body::after {
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.65) 100%);
+  animation: pipboy-flicker 6s infinite steps(1);
+}
+
+@keyframes pipboy-flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.88; }
+  94% { opacity: 1; }
+  97% { opacity: 0.94; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme='pipboy'] body::after { animation: none; }
+}
+
+/* Headings read like terminal prompts */
+[data-theme='pipboy'] .sidebar h2,
+[data-theme='pipboy'] .sidebar__section-header,
+[data-theme='pipboy'] .now-playing__header {
+  color: var(--phosphor);
+  letter-spacing: 2px;
+}
+
+[data-theme='pipboy'] .sidebar h2::before {
+  content: '> ';
+}
+
+[data-theme='pipboy'] .sidebar h2::after {
+  content: '_';
+  animation: pipboy-blink 1.1s infinite steps(1);
+}
+
+@keyframes pipboy-blink {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme='pipboy'] .sidebar h2::after { animation: none; }
+}
+
+/* Panels: hard 1px phosphor frames with a faint inner glow */
+[data-theme='pipboy'] .sidebar {
+  box-shadow: inset -1px 0 0 var(--phosphor-faint);
+}
+
+[data-theme='pipboy'] .an-node {
+  border-color: var(--phosphor-dim);
+  box-shadow: 0 0 0 1px var(--phosphor-faint), inset 0 0 14px rgba(61, 255, 122, 0.06);
+}
+
+[data-theme='pipboy'] .an-node--master,
+[data-theme='pipboy'] .an-node.selected,
+[data-theme='pipboy'] .an-node--sound.selected {
+  border-color: var(--phosphor);
+  box-shadow: 0 0 0 1px var(--phosphor), 0 0 14px rgba(61, 255, 122, 0.45), inset 0 0 14px rgba(61, 255, 122, 0.1);
+}
+
+/* Buttons: inverse-video on hover, like a selected terminal menu item */
+[data-theme='pipboy'] .an-btn {
+  background: transparent;
+  border-color: var(--phosphor-dim);
+  color: var(--phosphor);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 11px;
+}
+
+[data-theme='pipboy'] .an-btn:hover:not(:disabled) {
+  background: var(--phosphor);
+  color: var(--on-accent);
+  text-shadow: none;
+}
+
+[data-theme='pipboy'] .an-btn--primary {
+  background: var(--phosphor-faint);
+  border-color: var(--phosphor);
+  color: var(--phosphor);
+}
+
+[data-theme='pipboy'] .an-btn--play:hover:not(:disabled),
+[data-theme='pipboy'] .an-btn--stop:hover:not(:disabled) {
+  color: var(--on-accent);
+}
+
+[data-theme='pipboy'] .an-btn--play { background: transparent; }
+[data-theme='pipboy'] .an-btn--stop { background: transparent; }
+[data-theme='pipboy'] .an-btn--stop:hover:not(:disabled) { background: var(--c-red); }
+
+/* Form controls */
+[data-theme='pipboy'] input[type='text'],
+[data-theme='pipboy'] input[type='search'],
+[data-theme='pipboy'] input[type='number'],
+[data-theme='pipboy'] input:not([type]),
+[data-theme='pipboy'] select,
+[data-theme='pipboy'] textarea {
+  background: var(--bg);
+  color: var(--phosphor);
+  border: 1px solid var(--phosphor-dim);
+  caret-color: var(--phosphor);
+}
+
+[data-theme='pipboy'] input:focus,
+[data-theme='pipboy'] select:focus,
+[data-theme='pipboy'] textarea:focus {
+  outline: none;
+  border-color: var(--phosphor);
+  box-shadow: 0 0 8px rgba(61, 255, 122, 0.5);
+}
+
+[data-theme='pipboy'] ::selection {
+  background: var(--phosphor);
+  color: var(--on-accent);
+  text-shadow: none;
+}
+
+/* Sliders: segmented-looking track, square thumb */
+/* All range inputs (nodes, inspector, now playing) share the skinned track/thumb */
+[data-theme='pipboy'] input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+}
+
+[data-theme='pipboy'] input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--phosphor-dim) 0,
+    var(--phosphor-dim) 3px,
+    transparent 3px,
+    transparent 5px
+  );
+}
+
+[data-theme='pipboy'] input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 8px;
+  height: 12px;
+  margin-top: -4px;
+  background: var(--phosphor);
+  box-shadow: 0 0 6px var(--phosphor);
+}
+
+/* Scrollbars */
+[data-theme='pipboy'] ::-webkit-scrollbar { width: 10px; height: 10px; }
+[data-theme='pipboy'] ::-webkit-scrollbar-track { background: var(--bg); }
+[data-theme='pipboy'] ::-webkit-scrollbar-thumb {
+  background: var(--phosphor-faint);
+  border: 1px solid var(--phosphor-dim);
+}
+[data-theme='pipboy'] ::-webkit-scrollbar-thumb:hover { background: var(--phosphor-dim); }
+
+/* React Flow canvas */
+[data-theme='pipboy'] .react-flow {
+  --xy-background-color: var(--bg);
+  --xy-background-pattern-dots-color-default: var(--phosphor-faint);
+  --xy-edge-stroke-default: var(--phosphor-dim);
+  --xy-edge-stroke-selected-default: var(--phosphor);
+  --xy-connectionline-stroke-default: var(--phosphor);
+  --xy-handle-background-color-default: var(--phosphor);
+  --xy-handle-border-color-default: var(--bg);
+  background: var(--bg);
+}
+
+[data-theme='pipboy'] .react-flow__edge-path {
+  filter: drop-shadow(0 0 3px rgba(61, 255, 122, 0.6));
+}
+
+[data-theme='pipboy'] .react-flow__handle {
+  background: var(--phosphor);
+  border: 1px solid var(--bg);
+  box-shadow: 0 0 6px var(--phosphor);
+}
+
+[data-theme='pipboy'] .react-flow__minimap {
+  background: var(--bg) !important;
+  border-color: var(--phosphor-dim);
+}
+
+[data-theme='pipboy'] .react-flow__minimap-mask { fill: rgba(2, 10, 4, 0.7); }
+[data-theme='pipboy'] .react-flow__minimap-node { fill: var(--phosphor-dim); }
+
+[data-theme='pipboy'] .react-flow__controls { border-color: var(--phosphor-dim); }
+[data-theme='pipboy'] .react-flow__controls-button {
+  border-bottom-color: var(--phosphor-faint) !important;
+}
+[data-theme='pipboy'] .react-flow__controls-button:hover {
+  background: var(--phosphor-faint) !important;
+}
+
+[data-theme='pipboy'] .react-flow__attribution { display: none; }
+
+/* Popovers get a stronger glow instead of a drop shadow */
+[data-theme='pipboy'] .emoji-popover {
+  box-shadow: 0 0 16px rgba(61, 255, 122, 0.25);
+}
+
+/* Dropdowns: custom arrow so it can sit inset from the right edge.
+   select.an-btn (toolbar Effect picker) needs the extra specificity to beat the button background. */
+[data-theme='pipboy'] select,
+[data-theme='pipboy'] select.an-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--phosphor) 50%),
+    linear-gradient(135deg, var(--phosphor) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* Inverse-video hover: arrow flips to the dark colour */
+[data-theme='pipboy'] select.an-btn:hover:not(:disabled) {
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--on-accent) 50%),
+    linear-gradient(135deg, var(--on-accent) 50%, transparent 50%);
+}
