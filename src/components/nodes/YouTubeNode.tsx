@@ -19,9 +19,10 @@ declare global {
   interface Window {
     YT?: {
       Player: new (el: string | HTMLElement, opts: {
-        height: string; width: string; videoId: string;
-        playerVars?: Record<string, number>;
+        height: string; width: string; videoId: string; host?: string;
+        playerVars?: Record<string, number | string>;
         events?: {
+          onError?: (e: YTPlayerEvent) => void;
           onReady?: (e: { target: YTPlayer }) => void;
           onStateChange?: (e: YTPlayerEvent) => void;
         };
@@ -31,6 +32,8 @@ declare global {
     onYouTubeIframeAPIReady?: () => void;
   }
 }
+
+const YT_ORIGIN = 'https://foaly.app';
 
 let ytApiReady = false;
 const ytApiCallbacks: Array<() => void> = [];
@@ -71,6 +74,8 @@ export function YouTubeNode({ id }: NodeProps) {
   const loopRef = useRef(false);
   const playerDivId = `yt-player-${id}`;
   const [progress, setProgress] = useState(0);
+  // Bumped when the player becomes ready so play/volume effects re-apply current state
+  const [ready, setReady] = useState(false);
 
   // Keep loopRef in sync so the onStateChange closure sees the latest value
   useEffect(() => { loopRef.current = data?.loop ?? false; }, [data?.loop]);
@@ -80,15 +85,29 @@ export function YouTubeNode({ id }: NodeProps) {
     if (!data?.videoId) return;
     const videoId = data.videoId;
     let destroyed = false;
+    let player: YTPlayer | null = null;
 
     loadYTApi().then(() => {
       if (destroyed || !window.YT) return;
-      playerRef.current?.destroy();
-      playerRef.current = new window.YT.Player(playerDivId, {
+      player = new window.YT.Player(playerDivId, {
         height: '1', width: '1', videoId,
-        playerVars: { autoplay: 0, controls: 0 },
+        // Packaged builds run on app://, which YouTube rejects as an origin; see YT_REFERRER in main.ts.
+        host: 'https://www.youtube.com',
+        playerVars: {
+          autoplay: 0, controls: 0,
+          ...(window.location.protocol === 'app:' ? { origin: YT_ORIGIN } : {}),
+        },
         events: {
-          onReady: (e) => e.target.setVolume(Math.round((data?.volume ?? 0.8) * groupVolume * 100)),
+          onError: (e) => {
+            console.error('[YouTubeNode] player error', e.data, 'videoId:', videoId);
+            updateNodeData(id, { playing: false });
+          },
+          // The player's methods don't exist until onReady, so only expose it via playerRef then
+          onReady: (e) => {
+            if (destroyed) { e.target.destroy(); return; }
+            playerRef.current = e.target;
+            setReady(true);
+          },
           onStateChange: (e) => {
             if (window.YT && e.data === window.YT.PlayerState.ENDED) {
               if (loopRef.current) {
@@ -105,8 +124,9 @@ export function YouTubeNode({ id }: NodeProps) {
 
     return () => {
       destroyed = true;
-      playerRef.current?.destroy();
+      setReady(false);
       playerRef.current = null;
+      player?.destroy?.();
     };
   }, [data?.videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -115,11 +135,11 @@ export function YouTubeNode({ id }: NodeProps) {
     if (!p) return;
     if (data?.playing) p.playVideo();
     else p.pauseVideo();
-  }, [data?.playing]);
+  }, [data?.playing, ready]);
 
   useEffect(() => {
     playerRef.current?.setVolume(Math.round((data?.volume ?? 0.8) * groupVolume * 100));
-  }, [data?.volume, groupVolume]);
+  }, [data?.volume, groupVolume, ready]);
 
   useEffect(() => {
     if (!data?.playing) { setProgress(0); return; }

@@ -1,21 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 export const THEMES = [
-  { id: 'default', label: 'Default' },
-  { id: 'pipboy', label: 'Pip-Boy' },
-  { id: 'neverwinter', label: 'Neverwinter' },
+  { id: "default", label: "Default" },
+  { id: "pipboy", label: "Pip-Boy" },
+  { id: "gilmore", label: "Gilmore" },
 ] as const;
 
-export type ThemeId = (typeof THEMES)[number]['id'];
+export type ThemeId = (typeof THEMES)[number]["id"];
 
-const KEY = 'foaly.theme';
+const KEY = "foaly.theme";
 
 function load(): ThemeId {
   try {
     const v = localStorage.getItem(KEY);
     if (THEMES.some((t) => t.id === v)) return v as ThemeId;
-  } catch { /* storage unavailable */ }
-  return 'default';
+  } catch {
+    /* storage unavailable */
+  }
+  return "default";
 }
 
 export function applyTheme(id: ThemeId) {
@@ -31,7 +33,11 @@ export function useTheme(): [ThemeId, (id: ThemeId) => void] {
   const [theme, setTheme] = useState<ThemeId>(load);
   useEffect(() => {
     applyTheme(theme);
-    try { localStorage.setItem(KEY, theme); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(KEY, theme);
+    } catch {
+      /* ignore */
+    }
   }, [theme]);
   return [theme, setTheme];
 }

@@ -165,7 +165,7 @@
   caret-color: var(--phosphor);
 }
 
-[data-theme='pipboy'] input:focus,
+[data-theme='pipboy'] input:not([type='range']):not([type='checkbox']):focus,
 [data-theme='pipboy'] select:focus,
 [data-theme='pipboy'] textarea:focus {
   outline: none;
@@ -284,4 +284,45 @@
   background-image:
     linear-gradient(45deg, transparent 50%, var(--on-accent) 50%),
     linear-gradient(135deg, var(--on-accent) 50%, transparent 50%);
+}
+
+/* Checkboxes: hollow terminal box, filled block when checked */
+[data-theme='pipboy'] input[type='checkbox'] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  display: inline-grid;
+  place-content: center;
+  background: var(--bg);
+  border: 1px solid var(--phosphor-dim);
+  cursor: pointer;
+}
+
+[data-theme='pipboy'] input[type='checkbox']::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  background: var(--phosphor);
+  box-shadow: 0 0 6px var(--phosphor);
+  transform: scale(0);
+}
+
+[data-theme='pipboy'] input[type='checkbox']:checked {
+  border-color: var(--phosphor);
+}
+
+[data-theme='pipboy'] input[type='checkbox']:checked::after { transform: scale(1); }
+[data-theme='pipboy'] input[type='checkbox']:hover { border-color: var(--phosphor); }
+[data-theme='pipboy'] input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 8px rgba(61, 255, 122, 0.5);
+}
+
+/* Slider focus glows on the thumb, not the whole input box */
+[data-theme='pipboy'] input[type='range']:focus { outline: none; }
+[data-theme='pipboy'] input[type='range']:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 10px var(--phosphor), 0 0 3px var(--phosphor);
 }

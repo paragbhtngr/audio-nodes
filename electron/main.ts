@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell, globalShortcut, protocol, net } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, globalShortcut, protocol, net, session } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -326,7 +326,19 @@ ipcMain.handle('hotkeys:setEnabled', (_evt, enabled: boolean) => {
 
 app.setName('Foaly');
 
+// YouTube's embed rejects non-http(s) referrers (error 153), and app://localhost isn't one.
+// Present an https referrer on YouTube requests; must match YT_ORIGIN in YouTubeNode.tsx.
+const YT_REFERRER = 'https://foaly.app/';
+
 app.whenReady().then(() => {
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['*://*.youtube.com/*', '*://*.youtube-nocookie.com/*'] },
+    (details, callback) => {
+      if (!VITE_DEV_SERVER_URL) details.requestHeaders['Referer'] = YT_REFERRER;
+      callback({ requestHeaders: details.requestHeaders });
+    }
+  );
+
   protocol.handle('app', (req) => {
     const { pathname } = new URL(req.url);
     const filePath = path.join(RENDERER_DIST, pathname === '/' ? 'index.html' : pathname);
