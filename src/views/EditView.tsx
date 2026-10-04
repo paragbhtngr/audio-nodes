@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -15,6 +15,7 @@ import {
   type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useShallow } from 'zustand/react/shallow';
 import { useStore } from '../state/store';
 import { MasterOutNode } from '../components/nodes/MasterOutNode';
 import { SoundNode } from '../components/nodes/SoundNode';
@@ -29,6 +30,7 @@ import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
 import { ThemePicker } from '../components/ThemePicker';
 import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData, RandomPoolNodeData, YouTubeNodeData, EffectType, Scene } from '../types';
+import { rangeFill } from '../components/rangeFill';
 
 const nodeTypes = { sound: SoundNode, master: MasterOutNode, group: GroupNode, randomPool: RandomPoolNode, effect: EffectNode, youtube: YouTubeNode };
 
@@ -92,41 +94,69 @@ async function deserializeProject(json: string, projectPath: string): Promise<ob
 
 function Canvas() {
   const project = useStore((s) => s.project);
-  const { addSoundNode, addGroupNode, addRandomPoolNode, addEffectNode, addYouTubeNode, addAudioFile, instantiatePrefab, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, removeNode: storeRemoveNode, removeGroupReconnect, removeGroupWithMembers, updateNodePosition, selectNode } = useStore((s) => s);
+  const { addSoundNode, addGroupNode, addRandomPoolNode, addEffectNode, addYouTubeNode, addAudioFile, instantiatePrefab, addEdge: storeAddEdge, removeEdge: storeRemoveEdge, removeNode: storeRemoveNode, removeGroupReconnect, removeGroupWithMembers, updateNodePosition, selectNode } = useStore(useShallow((s) => ({
+    addSoundNode: s.addSoundNode, addGroupNode: s.addGroupNode, addRandomPoolNode: s.addRandomPoolNode, addEffectNode: s.addEffectNode, addYouTubeNode: s.addYouTubeNode,
+    addAudioFile: s.addAudioFile, instantiatePrefab: s.instantiatePrefab, addEdge: s.addEdge, removeEdge: s.removeEdge, removeNode: s.removeNode,
+    removeGroupReconnect: s.removeGroupReconnect, removeGroupWithMembers: s.removeGroupWithMembers, updateNodePosition: s.updateNodePosition, selectNode: s.selectNode,
+  })));
   const { screenToFlowPosition } = useReactFlow();
 
-  const hiddenIds = collapsedHiddenIds(project);
-  const orphanedIds = computeOrphanedIds(project);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(project.nodes.map((n) => toRFNode(n, hiddenIds.has(n.id), orphanedIds.has(n.id))));
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(project.edges.map((e) => toRFEdge(e, hiddenIds.has(e.source))));
+  const [initial] = useState(() => {
+    const hids = collapsedHiddenIds(project);
+    const orphs = computeOrphanedIds(project);
+    return {
+      nodes: project.nodes.map((n) => toRFNode(n, hids.has(n.id), orphs.has(n.id))),
+      edges: project.edges.map((e) => toRFEdge(e, hids.has(e.source))),
+    };
+  });
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initial.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges);
 
-  const prevProjectRef = useRef(project);
+  // Rebuild the whole RF graph only when its structure changes (nodes added/removed/moved, edges rewired,
+  // project loaded). Data-only updates such as play/volume are handled by the cheaper sync below.
+  const structureKey = useMemo(
+    () => project.nodes.map((n) => `${n.id}@${n.position.x},${n.position.y}`).join('|')
+      + '#' + project.edges.map((e) => `${e.source}>${e.target}`).join('|'),
+    [project.nodes, project.edges]
+  );
+  const prevStructureKeyRef = useRef(structureKey);
   useEffect(() => {
-    if (prevProjectRef.current !== project) {
-      const hids = collapsedHiddenIds(project);
-      const orphs = computeOrphanedIds(project);
-      setNodes(project.nodes.map((n) => toRFNode(n, hids.has(n.id), orphs.has(n.id))));
-      setEdges(project.edges.map((e) => toRFEdge(e, hids.has(e.source))));
-      prevProjectRef.current = project;
-    }
-  }, [project, setNodes, setEdges]);
+    if (prevStructureKeyRef.current === structureKey) return;
+    prevStructureKeyRef.current = structureKey;
+    const hids = collapsedHiddenIds(project);
+    const orphs = computeOrphanedIds(project);
+    setNodes(project.nodes.map((n) => toRFNode(n, hids.has(n.id), orphs.has(n.id))));
+    setEdges(project.edges.map((e) => toRFEdge(e, hids.has(e.source))));
+  }, [structureKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // keep RF node data in sync when audio state changes
+  // keep RF node data in sync when audio state changes; untouched nodes keep their identity so React Flow skips them
   useEffect(() => {
     const hids = collapsedHiddenIds(project);
     const orphs = computeOrphanedIds(project);
-    setNodes((rn) =>
-      rn.map((rfNode) => {
+    setNodes((rn) => {
+      let changed = false;
+      const next = rn.map((rfNode) => {
         const stored = project.nodes.find((n) => n.id === rfNode.id);
-        return stored
-          ? { ...rfNode, data: stored.data as unknown as Record<string, unknown>, hidden: hids.has(rfNode.id), className: orphs.has(rfNode.id) ? 'node-orphaned' : '' }
-          : rfNode;
-      })
-    );
-    setEdges((re) =>
-      re.map((rfEdge) => ({ ...rfEdge, hidden: hids.has(rfEdge.source) }))
-    );
-  }, [project.nodes, setNodes]);
+        if (!stored) return rfNode;
+        const hidden = hids.has(rfNode.id);
+        const className = orphs.has(rfNode.id) ? 'node-orphaned' : '';
+        if (rfNode.data === (stored.data as unknown) && !!rfNode.hidden === hidden && (rfNode.className ?? '') === className) return rfNode;
+        changed = true;
+        return { ...rfNode, data: stored.data as unknown as Record<string, unknown>, hidden, className };
+      });
+      return changed ? next : rn;
+    });
+    setEdges((re) => {
+      let changed = false;
+      const next = re.map((rfEdge) => {
+        const hidden = hids.has(rfEdge.source);
+        if (!!rfEdge.hidden === hidden) return rfEdge;
+        changed = true;
+        return { ...rfEdge, hidden };
+      });
+      return changed ? next : re;
+    });
+  }, [project.nodes, project.edges, setNodes, setEdges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => selectNode(node.id),
@@ -401,7 +431,7 @@ function ScenesPanel() {
       <div className="scenes__fade-row">
         <span className="an-node__label">Fade</span>
         <input type="range" className="insp__slider" min={0.5} max={10} step={0.5}
-          value={crossfadeDur} onChange={(e) => setCrossfadeDur(parseFloat(e.target.value))} />
+          value={crossfadeDur} style={rangeFill(crossfadeDur, 0.5, 10)} onChange={(e) => setCrossfadeDur(parseFloat(e.target.value))} />
         <span className="an-node__value">{crossfadeDur}s</span>
       </div>
       <ul className="library-list">
@@ -536,6 +566,7 @@ function NowPlayingPanel() {
               className="now-playing__vol nodrag"
               min={0} max={1} step={0.01}
               value={data.volume}
+              style={rangeFill(data.volume, 0, 1)}
               onChange={(e) => updateNodeData(n.id, { volume: parseFloat(e.target.value) })}
               title={`${Math.round(data.volume * 100)}%`}
             />
@@ -652,7 +683,7 @@ function HotkeyHandler() {
 }
 
 function MenuHandler() {
-  const { newProject, setProject, setFilePath } = useStore((s) => s);
+  const { newProject, setProject, setFilePath } = useStore(useShallow((s) => ({ newProject: s.newProject, setProject: s.setProject, setFilePath: s.setFilePath })));
   const filePath = useStore((s) => s.filePath);
   const project = useStore((s) => s.project);
   const addRecent = useRecentStore((s) => s.add);

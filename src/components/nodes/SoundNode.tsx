@@ -1,9 +1,10 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { audioEngine } from '../../audio/engine';
 import { useStore } from '../../state/store';
 import { LoopButton, PlayButton } from './NodeControls';
 import type { SoundNodeData } from '../../types';
+import { rangeFill } from '../rangeFill';
 
 export function SoundNode({ id }: NodeProps) {
   const data = useStore((s) => {
@@ -15,16 +16,24 @@ export function SoundNode({ id }: NodeProps) {
   const updateNodeData = useStore((s) => s.updateNodeData);
   const removeNode = useStore((s) => s.removeNode);
 
-  const [progress, setProgress] = useState(0);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!data?.playing) { setProgress(0); return; }
+    const setBar = (ratio: number) => {
+      if (progressRef.current) progressRef.current.style.setProperty('--progress', String(ratio));
+    };
+    if (!data?.playing) { setBar(0); return; }
     let raf: number;
-    const tick = () => {
-      const p = audioEngine.getProgress(id);
-      if (p && p.duration > 0) {
-        const ratio = p.elapsed / p.duration;
-        setProgress(data.loop ? ratio % 1 : Math.min(1, ratio));
+    let last = 0;
+    // Write straight to the DOM (no React render) and throttle; width would force layout each frame
+    const tick = (now: number) => {
+      if (now - last >= 66) {
+        last = now;
+        const p = audioEngine.getProgress(id);
+        if (p && p.duration > 0) {
+          const ratio = p.elapsed / p.duration;
+          setBar(data.loop ? ratio % 1 : Math.min(1, ratio));
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -54,7 +63,7 @@ export function SoundNode({ id }: NodeProps) {
         </button>
       </div>
       <div className="an-node__progress">
-        <div className="an-node__progress-fill" style={{ width: `${progress * 100}%` }} />
+        <div className="an-node__progress-fill" ref={progressRef} />
       </div>
       <div className="an-node__body">
         <div className="an-node__row">
@@ -68,6 +77,7 @@ export function SoundNode({ id }: NodeProps) {
           max={1}
           step={0.01}
           value={data.volume}
+          style={rangeFill(data.volume, 0, 1)}
           onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
         />
         <div className="an-node__row an-node__row--controls">

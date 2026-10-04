@@ -3,6 +3,7 @@ import { useStore } from '../../state/store';
 import { usePrefabStore } from '../../state/prefabStore';
 import { audioEngine } from '../../audio/engine';
 import type { SoundNodeData, MasterNodeData, GroupNodeData, RandomPoolNodeData, EffectNodeData, YouTubeNodeData } from '../../types';
+import { rangeFill } from '../rangeFill';
 
 const EMOJI_CATEGORIES: Record<string, string[]> = {
   'Music':   ['🎵','🎶','🎸','🎹','🎺','🥁','🎻','🎷','🪗','🪘','🔔','📯'],
@@ -86,6 +87,7 @@ function SliderRow({
         max={max}
         step={step}
         value={value}
+        style={rangeFill(value, min, max)}
         onChange={(e) => onChange(parseFloat(e.target.value))}
       />
     </div>
@@ -521,6 +523,7 @@ function EffectInspector({ id }: { id: string }) {
             <input type="range" className="insp__slider"
               min={Math.log10(20)} max={Math.log10(20000)} step={0.01}
               value={logFreq}
+              style={rangeFill(logFreq, Math.log10(20), Math.log10(20000))}
               onChange={(e) => u({ frequency: Math.round(Math.pow(10, parseFloat(e.target.value))) })} />
           </div>
           <SliderRow label="Resonance (Q)" value={data.q} min={0.1} max={10} step={0.1}

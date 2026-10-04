@@ -1,0 +1,493 @@
+/* Clippy skin: Windows 98. Silver 3D bevels, navy title bars, teal desktop, tooltip-yellow popups.
+   Overrides the variables defined in global.css, then rebuilds the chrome out of inset box-shadows. */
+
+:root[data-theme="clippy"] {
+  --w98-face: #c0c0c0;
+  --w98-light: #dfdfdf;
+  --w98-highlight: #ffffff;
+  --w98-shadow: #808080;
+  --w98-dark: #0a0a0a;
+  --w98-desktop: #008080;
+  --w98-navy: #000080;
+  --w98-title-end: #1084d0;
+  --w98-tooltip: #ffffe1;
+
+  /* Beveled edges as reusable box-shadows */
+  --w98-raised:
+    inset -1px -1px var(--w98-dark), inset 1px 1px var(--w98-highlight),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light);
+  --w98-pressed:
+    inset -1px -1px var(--w98-highlight), inset 1px 1px var(--w98-dark),
+    inset -2px -2px var(--w98-light), inset 2px 2px var(--w98-shadow);
+  --w98-sunken:
+    inset -1px -1px var(--w98-highlight), inset 1px 1px var(--w98-shadow),
+    inset -2px -2px var(--w98-light), inset 2px 2px var(--w98-dark);
+  --w98-etched: inset -1px -1px var(--w98-highlight), inset 1px 1px var(--w98-shadow);
+
+  --bg: var(--w98-face);
+  --panel: var(--w98-face);
+  --border: var(--w98-shadow);
+  --text: #000000;
+  --muted: #404040;
+  --accent: var(--w98-navy);
+  --on-accent: #ffffff;
+
+  /* The 16-colour VGA palette */
+  --c-red: #800000;
+  --c-green: #008000;
+  --c-purple: #800080;
+  --c-amber: #808000;
+  --c-cyan: #008080;
+  --c-yt: #ff0000;
+
+  --radius: 0px;
+  font-family: "Microsoft Sans Serif", "MS Sans Serif", Tahoma, Geneva, sans-serif;
+  color-scheme: light;
+}
+
+[data-theme="clippy"] body {
+  font-size: 11px;
+  -webkit-font-smoothing: none;
+}
+
+[data-theme="clippy"] * {
+  border-radius: 0 !important;
+}
+
+[data-theme="clippy"] button,
+[data-theme="clippy"] input,
+[data-theme="clippy"] select,
+[data-theme="clippy"] textarea {
+  font-family: inherit;
+  font-size: 11px;
+}
+
+[data-theme="clippy"] ::selection {
+  background: var(--w98-navy);
+  color: #ffffff;
+}
+
+/* Panels: plain silver dialogs separated by an etched groove */
+[data-theme="clippy"] .app-header,
+[data-theme="clippy"] .sidebar,
+[data-theme="clippy"] .inspector {
+  background: var(--w98-face);
+  border-color: transparent;
+}
+
+[data-theme="clippy"] .app-header { box-shadow: var(--w98-raised); }
+[data-theme="clippy"] .sidebar { box-shadow: inset -1px 0 var(--w98-dark), inset -2px 0 var(--w98-shadow); }
+[data-theme="clippy"] .inspector { box-shadow: inset 1px 0 var(--w98-highlight), inset 2px 0 var(--w98-light); }
+
+[data-theme="clippy"] .sidebar h2,
+[data-theme="clippy"] .sidebar__section-header,
+[data-theme="clippy"] .now-playing__header,
+[data-theme="clippy"] .insp__section-title {
+  color: #000000;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Inspector heading becomes an active title bar */
+[data-theme="clippy"] .insp__header {
+  margin: 0 0 6px;
+  padding: 3px 6px;
+  border: none;
+  background: linear-gradient(90deg, var(--w98-navy), var(--w98-title-end));
+  color: #ffffff;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+[data-theme="clippy"] .hint { color: var(--muted); }
+
+[data-theme="clippy"] .insp__label,
+[data-theme="clippy"] .insp__value,
+[data-theme="clippy"] .an-node__label,
+[data-theme="clippy"] .an-node__value { color: #000000; }
+
+/* Library rows: white list box, navy highlight on hover like Explorer */
+[data-theme="clippy"] .library-item {
+  background: #ffffff;
+  border: none;
+  box-shadow: var(--w98-sunken);
+  color: #000000;
+}
+
+[data-theme="clippy"] .library-item:hover {
+  background: var(--w98-navy);
+  color: #ffffff;
+}
+
+[data-theme="clippy"] .library-item:hover .library-item__dur,
+[data-theme="clippy"] .library-item:hover .library-item__remove { color: #ffffff; }
+
+/* Buttons: raised, push in when pressed, dotted focus rectangle */
+[data-theme="clippy"] .an-btn,
+[data-theme="clippy"] .insp__hotkey-btn,
+[data-theme="clippy"] .sidebar__add-btn {
+  background: var(--w98-face);
+  color: #000000;
+  border: none;
+  box-shadow: var(--w98-raised);
+  padding: 4px 12px;
+}
+
+[data-theme="clippy"] .an-btn:hover:not(:disabled) { background: var(--w98-face); }
+
+[data-theme="clippy"] .an-btn:active:not(:disabled),
+[data-theme="clippy"] .insp__hotkey-btn:active,
+[data-theme="clippy"] .sidebar__add-btn:active,
+[data-theme="clippy"] .insp__hotkey-btn--listening {
+  box-shadow: var(--w98-pressed);
+  padding: 5px 11px 3px 13px;
+}
+
+[data-theme="clippy"] .an-btn:focus-visible,
+[data-theme="clippy"] .an-icon-btn:focus-visible {
+  outline: 1px dotted #000000;
+  outline-offset: -4px;
+}
+
+[data-theme="clippy"] .an-btn:disabled {
+  color: var(--w98-shadow);
+  text-shadow: 1px 1px var(--w98-highlight);
+}
+
+/* Default button gets the extra black frame */
+[data-theme="clippy"] .an-btn--primary {
+  background: var(--w98-face);
+  color: #000000;
+  box-shadow: 0 0 0 1px var(--w98-dark), var(--w98-raised);
+}
+
+[data-theme="clippy"] .an-btn--play,
+[data-theme="clippy"] .an-btn--stop { background: var(--w98-face); }
+[data-theme="clippy"] .an-btn--play { color: var(--c-green); }
+[data-theme="clippy"] .an-btn--stop { color: var(--c-red); }
+
+/* Node play/stop/loop: square toolbar buttons instead of circles */
+[data-theme="clippy"] .an-icon-btn {
+  background: var(--w98-face);
+  border: none;
+  box-shadow: var(--w98-raised);
+  color: #000000;
+}
+
+[data-theme="clippy"] .an-icon-btn:hover:not(:disabled) { color: #000000; }
+[data-theme="clippy"] .an-icon-btn:active:not(:disabled) { box-shadow: var(--w98-pressed); }
+[data-theme="clippy"] .an-icon-btn--play { color: var(--c-green); }
+[data-theme="clippy"] .an-icon-btn--stop { color: var(--c-red); }
+
+[data-theme="clippy"] .an-icon-btn--loop.an-icon-btn--on {
+  background:
+    repeating-conic-gradient(var(--w98-face) 0 25%, var(--w98-highlight) 0 50%) 0 0 / 2px 2px;
+  box-shadow: var(--w98-pressed);
+  color: #000000;
+}
+
+/* Text fields and dropdowns: white, sunken */
+[data-theme="clippy"] input[type="text"],
+[data-theme="clippy"] input[type="search"],
+[data-theme="clippy"] input[type="number"],
+[data-theme="clippy"] input:not([type]),
+[data-theme="clippy"] select,
+[data-theme="clippy"] textarea {
+  background-color: #ffffff;
+  color: #000000;
+  border: none;
+  box-shadow: var(--w98-sunken);
+  padding: 3px 4px;
+}
+
+[data-theme="clippy"] input:not([type="range"]):not([type="checkbox"]):focus,
+[data-theme="clippy"] select:focus,
+[data-theme="clippy"] textarea:focus { outline: none; }
+
+/* Dropdowns: the square raised arrow button on the right.
+   select.an-btn (toolbar Effect picker) needs the extra specificity to beat the button styles. */
+[data-theme="clippy"] select,
+[data-theme="clippy"] select.an-btn {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 3px 22px 3px 4px;
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #000000 50%),
+    linear-gradient(135deg, #000000 50%, transparent 50%),
+    linear-gradient(var(--w98-face), var(--w98-face));
+  background-position: calc(100% - 10px) 52%, calc(100% - 6px) 52%, calc(100% - 2px) 2px;
+  background-size: 4px 4px, 4px 4px, 16px calc(100% - 4px);
+  background-repeat: no-repeat;
+  box-shadow: var(--w98-sunken);
+  color: #000000;
+}
+
+/* Checkboxes: white sunken box with a black tick */
+[data-theme="clippy"] input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  display: inline-grid;
+  place-content: center;
+  background: #ffffff;
+  box-shadow: var(--w98-sunken);
+  cursor: pointer;
+}
+
+[data-theme="clippy"] input[type="checkbox"]::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  background: #000000;
+  clip-path: polygon(0 45%, 30% 75%, 100% 5%, 100% 30%, 30% 100%, 0 70%);
+  transform: scale(0);
+}
+
+[data-theme="clippy"] input[type="checkbox"]:checked::after { transform: scale(1); }
+[data-theme="clippy"] input[type="checkbox"]:focus-visible { outline: 1px dotted #000000; outline-offset: 2px; }
+
+/* Sliders: Windows trackbar, a sunken groove with a raised pointer */
+/* All range inputs (nodes, inspector, now playing) share the skinned track/thumb */
+[data-theme="clippy"] input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+
+[data-theme="clippy"] input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--w98-face);
+  box-shadow: var(--w98-sunken);
+}
+
+[data-theme="clippy"] input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 20px;
+  margin-top: -8px;
+  border: none;
+  border-radius: 0; /* the universal reset doesn't reach pseudo-elements */
+  background: var(--w98-face);
+  box-shadow: var(--w98-raised);
+}
+
+[data-theme="clippy"] input[type="range"]:focus { outline: none; }
+[data-theme="clippy"] input[type="range"]:focus-visible { outline: 1px dotted #000000; }
+
+/* Scrollbars: checkered trough, raised thumb and arrows */
+[data-theme="clippy"] ::-webkit-scrollbar { width: 16px; height: 16px; }
+[data-theme="clippy"] ::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(var(--w98-face) 0 25%, var(--w98-highlight) 0 50%) 0 0 / 2px 2px;
+}
+[data-theme="clippy"] ::-webkit-scrollbar-thumb {
+  background: var(--w98-face);
+  box-shadow: var(--w98-raised);
+}
+[data-theme="clippy"] ::-webkit-scrollbar-corner { background: var(--w98-face); }
+
+/* Nodes are windows: silver frame, gradient title bar, close box */
+[data-theme="clippy"] .an-node {
+  --title: var(--w98-navy);
+  --title-end: var(--w98-title-end);
+  background: var(--w98-face);
+  border: none;
+  padding: 3px;
+  box-shadow: var(--w98-raised);
+  color: #000000;
+}
+
+/* Each node type gets its own title colour from the VGA palette */
+[data-theme="clippy"] .an-node--effect { --title: #006060; --title-end: #20a0a0; }
+[data-theme="clippy"] .an-node--pool { --title: #606000; --title-end: #a0a020; }
+/* Groups use their chosen colour, darkened behind the title text so white stays legible */
+[data-theme="clippy"] .an-node--group {
+  --title: color-mix(in srgb, var(--group-color, #800080) 45%, black);
+  --title-end: var(--group-color, #a040a0);
+}
+[data-theme="clippy"] .an-node--youtube { --title: #800000; --title-end: #d02020; }
+
+[data-theme="clippy"] .an-node__header,
+[data-theme="clippy"] .an-node--group .an-node__header {
+  padding: 2px 3px 2px 5px;
+  border: none;
+  background: linear-gradient(90deg, var(--title), var(--title-end));
+  color: #ffffff !important; /* group headers set an inline colour */
+  font-weight: 700;
+  font-size: 11px;
+}
+
+[data-theme="clippy"] .an-node__header .an-node__muted { color: var(--w98-light); }
+
+/* Unplayed sound/YouTube windows read as inactive: grey title bar */
+[data-theme="clippy"] .an-node--sound:not(.an-node--playing) .an-node__header,
+[data-theme="clippy"] .an-node--youtube:not(.an-node--playing) .an-node__header {
+  background: linear-gradient(90deg, var(--w98-shadow), #b5b5b5);
+  color: var(--w98-face) !important;
+}
+
+[data-theme="clippy"] .an-node--sound:not(.an-node--playing),
+[data-theme="clippy"] .an-node--youtube:not(.an-node--playing) { border: none; }
+
+[data-theme="clippy"] .an-node--playing { box-shadow: var(--w98-raised); }
+
+[data-theme="clippy"] .react-flow__node.selected .an-node {
+  outline: 1px dotted #000000;
+  outline-offset: 1px;
+}
+
+[data-theme="clippy"] .node-orphaned .an-node {
+  opacity: 0.6;
+  outline: 1px dashed var(--w98-dark);
+}
+
+[data-theme="clippy"] .an-node__delete,
+[data-theme="clippy"] .an-node__collapse {
+  display: inline-grid;
+  place-content: center;
+  width: 16px;
+  height: 14px;
+  margin-left: 4px;
+  padding: 0;
+  opacity: 1;
+  border: none;
+  background: var(--w98-face);
+  box-shadow: var(--w98-raised);
+  color: #000000;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+[data-theme="clippy"] .an-node__delete:hover { color: #000000; }
+[data-theme="clippy"] .an-node__delete:active,
+[data-theme="clippy"] .an-node__collapse:active { box-shadow: var(--w98-pressed); }
+
+[data-theme="clippy"] .an-node__label-input {
+  background: #ffffff;
+  color: #000000;
+}
+
+/* Progress bar: sunken well filled with chunky navy blocks */
+[data-theme="clippy"] .an-node__progress {
+  height: 12px;
+  margin: 3px 0 0;
+  padding: 2px;
+  background: var(--w98-face);
+  box-shadow: var(--w98-sunken);
+}
+
+[data-theme="clippy"] .an-node__progress-fill,
+[data-theme="clippy"] .an-node--youtube .an-node__progress-fill {
+  background: repeating-linear-gradient(90deg, var(--w98-navy) 0 8px, transparent 8px 10px);
+  /* Crop instead of scale so blocks keep their size, revealing one whole block at a time */
+  transform: none;
+  transition: none;
+  clip-path: inset(0 calc(100% - round(down, calc(var(--progress, 0) * 100%), 10px)) 0 0);
+}
+
+[data-theme="clippy"] .an-node__collapsed-badge {
+  background: var(--w98-face) !important;
+  border: none !important;
+  box-shadow: var(--w98-etched);
+  color: #000000 !important;
+}
+
+/* React Flow canvas is the desktop */
+[data-theme="clippy"] .react-flow {
+  --xy-background-color: var(--w98-desktop);
+  --xy-background-pattern-dots-color-default: #006a6a;
+  --xy-edge-stroke-default: #000000;
+  --xy-edge-stroke-selected-default: #ffffff;
+  --xy-connectionline-stroke-default: #ffffff;
+  --xy-handle-background-color-default: var(--w98-face);
+  --xy-handle-border-color-default: var(--w98-dark);
+  background: var(--w98-desktop);
+}
+
+[data-theme="clippy"] .react-flow__edge-path { stroke-width: 2; }
+
+[data-theme="clippy"] .react-flow__handle {
+  width: 9px;
+  height: 9px;
+  background: var(--w98-face);
+  border: 1px solid var(--w98-dark);
+  box-shadow: inset 1px 1px var(--w98-highlight);
+}
+
+[data-theme="clippy"] .react-flow__minimap {
+  background: var(--w98-face) !important;
+  border: none;
+  box-shadow: var(--w98-raised);
+}
+
+[data-theme="clippy"] .react-flow__minimap-mask { fill: rgba(0, 128, 128, 0.6); }
+[data-theme="clippy"] .react-flow__minimap-node { fill: var(--w98-navy); }
+
+[data-theme="clippy"] .react-flow__controls {
+  border: none;
+  box-shadow: none;
+}
+
+[data-theme="clippy"] .react-flow__controls-button {
+  background: var(--w98-face) !important;
+  border: none !important;
+  box-shadow: var(--w98-raised);
+  color: #000000;
+}
+
+[data-theme="clippy"] .react-flow__controls-button:active { box-shadow: var(--w98-pressed); }
+[data-theme="clippy"] .react-flow__controls-button svg { fill: #000000; }
+[data-theme="clippy"] .react-flow__attribution { display: none; }
+
+/* Popups: the hotkey HUD is a tooltip, the emoji picker a little dialog */
+[data-theme="clippy"] .hud {
+  background: var(--w98-tooltip);
+  border: 1px solid #000000;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+  color: #000000;
+}
+
+[data-theme="clippy"] .hud__title {
+  border-bottom-color: #000000;
+  color: #000000;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+[data-theme="clippy"] .hud__key {
+  background: var(--w98-face);
+  border: none;
+  box-shadow: var(--w98-raised);
+  color: #000000;
+  font-family: inherit;
+}
+
+[data-theme="clippy"] .emoji-popover {
+  background: var(--w98-face);
+  border: none;
+  box-shadow: var(--w98-raised), 2px 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="clippy"] .now-playing {
+  background: var(--w98-face);
+  border-color: transparent;
+  box-shadow: var(--w98-etched);
+}
+
+[data-theme="clippy"] .theme-picker {
+  border-top-color: var(--w98-shadow);
+  box-shadow: inset 0 1px var(--w98-highlight);
+  color: #000000;
+  text-transform: none;
+  letter-spacing: 0;
+}

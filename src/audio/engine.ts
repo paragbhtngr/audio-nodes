@@ -52,7 +52,10 @@ class AudioEngine {
   }
 
   init() {
-    this.unsub = useStore.subscribe((state) => this.reconcile(state.project));
+    this.unsub = useStore.subscribe((state, prev) => {
+      // Selection and other non-project changes don't affect audio
+      if (state.project !== prev.project) this.reconcile(state.project);
+    });
     this.reconcile(useStore.getState().project);
   }
 

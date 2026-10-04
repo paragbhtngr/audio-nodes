@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
 import { LoopButton, PlayButton } from './NodeControls';
 import type { RandomPoolNodeData } from '../../types';
+import { rangeFill } from '../rangeFill';
 
 export function RandomPoolNode({ id }: NodeProps) {
   const data = useStore((s) => {
@@ -100,6 +101,7 @@ export function RandomPoolNode({ id }: NodeProps) {
           className="an-node__slider nodrag"
           min={0} max={1} step={0.01}
           value={data.volume}
+          style={rangeFill(data.volume, 0, 1)}
           onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
         />
 

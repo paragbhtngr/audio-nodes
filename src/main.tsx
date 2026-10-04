@@ -9,6 +9,7 @@ import "@fontsource/cormorant/latin-700.css";
 import "@fontsource/cormorant-unicase/latin-600.css";
 import "@fontsource/cormorant-unicase/latin-700.css";
 import "./styles/themes/gilmore.css";
+import "./styles/themes/clippy.css";
 import { initTheme } from "./state/theme";
 
 initTheme();

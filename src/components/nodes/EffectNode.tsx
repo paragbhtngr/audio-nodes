@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
 import type { EffectNodeData } from '../../types';
+import { rangeFill } from '../rangeFill';
 
 const LABELS: Record<string, string> = { reverb: 'Reverb', lowpass: 'Low Pass', highpass: 'High Pass' };
 
@@ -27,7 +28,7 @@ export function EffectNode({ id }: NodeProps) {
               <span className="an-node__value">{Math.round(data.wet * 100)}%</span>
             </div>
             <input type="range" className="an-node__slider nodrag" min={0} max={1} step={0.01}
-              value={data.wet} onChange={(e) => updateNodeData(id, { wet: parseFloat(e.target.value) })} />
+              value={data.wet} style={rangeFill(data.wet, 0, 1)} onChange={(e) => updateNodeData(id, { wet: parseFloat(e.target.value) })} />
           </>
         ) : (
           <>
@@ -38,6 +39,7 @@ export function EffectNode({ id }: NodeProps) {
             <input type="range" className="an-node__slider nodrag"
               min={Math.log10(20)} max={Math.log10(20000)} step={0.01}
               value={Math.log10(data.frequency)}
+              style={rangeFill(Math.log10(data.frequency), Math.log10(20), Math.log10(20000))}
               onChange={(e) => updateNodeData(id, { frequency: Math.round(Math.pow(10, parseFloat(e.target.value))) })} />
           </>
         )}

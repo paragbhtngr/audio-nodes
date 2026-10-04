@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type {
   Project, ProjectNode, ProjectEdge, AudioFile, AudioNodeData,
   SoundNodeData, EffectType, Scene, Prefab, YouTubeNodeData,
@@ -73,6 +73,32 @@ interface StoreState {
   setHotkey: (key: string, nodeId: string) => void;
   removeHotkey: (key: string) => void;
 }
+
+// persist writes the whole project synchronously on every set(); coalesce writes so rapid
+// updates (playback toggles, volume sliders) don't serialize the project each time.
+let pendingWrite: ReturnType<typeof setTimeout> | null = null;
+let pendingValue: { name: string; value: string } | null = null;
+
+function flushPendingWrite() {
+  if (pendingWrite) clearTimeout(pendingWrite);
+  pendingWrite = null;
+  if (!pendingValue) return;
+  const { name, value } = pendingValue;
+  pendingValue = null;
+  try { localStorage.setItem(name, value); } catch { /* storage unavailable or full */ }
+}
+
+const debouncedStorage: StateStorage = {
+  getItem: (name) => localStorage.getItem(name),
+  setItem: (name, value) => {
+    pendingValue = { name, value };
+    if (pendingWrite) clearTimeout(pendingWrite);
+    pendingWrite = setTimeout(flushPendingWrite, 500);
+  },
+  removeItem: (name) => localStorage.removeItem(name),
+};
+
+if (typeof window !== 'undefined') window.addEventListener('beforeunload', flushPendingWrite);
 
 export const useStore = create<StoreState>()(
   persist(
@@ -340,6 +366,7 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: 'audio-nodes-session',
+      storage: createJSONStorage(() => debouncedStorage),
       partialize: (state) => ({ project: state.project, filePath: state.filePath }),
     }
   )

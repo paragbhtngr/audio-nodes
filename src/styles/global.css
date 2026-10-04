@@ -384,6 +384,7 @@ body,
 .an-node--group .an-node__header {
   color: var(--c-purple);
   gap: 6px;
+  text-align: left; /* React Flow centres text in type="group" nodes */
 }
 
 .an-node__icon {
@@ -494,7 +495,12 @@ body,
 
 .an-node__progress-fill {
   height: 100%;
+  width: 100%;
   background: var(--accent);
+  /* --progress (0–1) is written by the node's playback loop */
+  transform: scaleX(var(--progress, 0));
+  transform-origin: left;
+  transition: transform 0.1s linear;
 }
 
 .an-node__header {
@@ -574,7 +580,10 @@ body,
   font-style: italic;
 }
 
-.an-node__slider {
+/* Inspector, scene fade and now-playing sliders share the node card slider */
+.an-node__slider,
+.insp__slider,
+.now-playing__vol {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
@@ -584,13 +593,22 @@ body,
   cursor: pointer;
 }
 
-.an-node__slider::-webkit-slider-runnable-track {
+.an-node__slider::-webkit-slider-runnable-track,
+.insp__slider::-webkit-slider-runnable-track,
+.now-playing__vol::-webkit-slider-runnable-track {
   height: 3px;
   border-radius: 2px;
   background: var(--border);
 }
 
-.an-node__slider::-webkit-slider-thumb {
+/* Default skin fills the track up to the thumb (--fill comes from rangeFill) */
+[data-theme='default'] input[type='range']::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--border) var(--fill, 0%));
+}
+
+.an-node__slider::-webkit-slider-thumb,
+.insp__slider::-webkit-slider-thumb,
+.now-playing__vol::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 10px;
@@ -664,11 +682,6 @@ body,
   font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-}
-
-.insp__slider {
-  width: 100%;
-  accent-color: var(--accent);
 }
 
 .insp__check {

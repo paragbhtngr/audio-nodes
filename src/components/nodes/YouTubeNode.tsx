@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../state/store';
 import { LoopButton, PlayButton } from './NodeControls';
 import type { GroupNodeData, YouTubeNodeData } from '../../types';
+import { rangeFill } from '../rangeFill';
 
 // Minimal YT IFrame API types
 interface YTPlayer {
@@ -73,7 +74,7 @@ export function YouTubeNode({ id }: NodeProps) {
   const playerRef = useRef<YTPlayer | null>(null);
   const loopRef = useRef(false);
   const playerDivId = `yt-player-${id}`;
-  const [progress, setProgress] = useState(0);
+  const progressRef = useRef<HTMLDivElement>(null);
   // Bumped when the player becomes ready so play/volume effects re-apply current state
   const [ready, setReady] = useState(false);
 
@@ -142,13 +143,19 @@ export function YouTubeNode({ id }: NodeProps) {
   }, [data?.volume, groupVolume, ready]);
 
   useEffect(() => {
-    if (!data?.playing) { setProgress(0); return; }
+    const setBar = (ratio: number) => {
+      if (progressRef.current) progressRef.current.style.setProperty('--progress', String(ratio));
+    };
+    if (!data?.playing) { setBar(0); return; }
     let raf: number;
-    const tick = () => {
-      const p = playerRef.current;
-      const duration = p?.getDuration?.() ?? 0;
-      if (p && duration > 0) {
-        setProgress(Math.min(1, p.getCurrentTime() / duration));
+    let last = 0;
+    // Write straight to the DOM (no React render) and throttle; width would force layout each frame
+    const tick = (now: number) => {
+      if (now - last >= 66) {
+        last = now;
+        const p = playerRef.current;
+        const duration = p?.getDuration?.() ?? 0;
+        if (p && duration > 0) setBar(Math.min(1, p.getCurrentTime() / duration));
       }
       raf = requestAnimationFrame(tick);
     };
@@ -167,7 +174,7 @@ export function YouTubeNode({ id }: NodeProps) {
         <button className="an-node__delete" onClick={() => removeNode(id)} title="Remove node">×</button>
       </div>
       <div className="an-node__progress">
-        <div className="an-node__progress-fill" style={{ width: `${progress * 100}%` }} />
+        <div className="an-node__progress-fill" ref={progressRef} />
       </div>
       <div className="an-node__body">
         <div className="an-node__row">
@@ -177,6 +184,7 @@ export function YouTubeNode({ id }: NodeProps) {
         <input
           type="range" className="an-node__slider nodrag"
           min={0} max={1} step={0.01} value={data.volume}
+          style={rangeFill(data.volume, 0, 1)}
           onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
         />
         <div className="an-node__row an-node__row--controls">

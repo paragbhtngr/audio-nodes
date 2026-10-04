@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
 import type { MasterNodeData } from '../../types';
+import { rangeFill } from '../rangeFill';
 
 export function MasterOutNode({ id }: NodeProps) {
   const data = useStore((s) => {
@@ -27,6 +28,7 @@ export function MasterOutNode({ id }: NodeProps) {
           max={1}
           step={0.01}
           value={data.volume}
+          style={rangeFill(data.volume, 0, 1)}
           onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
         />
       </div>

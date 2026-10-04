@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type CSSProperties } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
 import type { GroupNodeData, SoundNodeData, YouTubeNodeData } from '../../types';
+import { rangeFill } from '../rangeFill';
 
 export function GroupNode({ id }: NodeProps) {
   const data = useStore((s) => {
@@ -67,7 +68,7 @@ export function GroupNode({ id }: NodeProps) {
   };
 
   return (
-    <div className="an-node an-node--group" style={{ borderColor: data.color }}>
+    <div className="an-node an-node--group" style={{ borderColor: data.color, '--group-color': data.color } as CSSProperties}>
       <Handle type="target" position={Position.Left} />
 
       <div className="an-node__header" style={{ color: data.color }}>
@@ -116,6 +117,7 @@ export function GroupNode({ id }: NodeProps) {
           className="an-node__slider nodrag"
           min={0} max={1} step={0.01}
           value={data.volume}
+          style={rangeFill(data.volume, 0, 1)}
           onChange={(e) => updateNodeData(id, { volume: parseFloat(e.target.value) })}
         />
 
