@@ -271,7 +271,7 @@ export const useStore = create<StoreState>()(
         })),
 
       removeNode: (id) =>
-        set((s) => ({
+        id === MASTER_NODE_ID ? undefined : set((s) => ({
           project: {
             ...s.project,
             nodes: s.project.nodes.filter((n) => n.id !== id),

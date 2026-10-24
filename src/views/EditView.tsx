@@ -41,7 +41,7 @@ function formatDuration(s: number) {
 }
 
 function toRFNode(n: { id: string; type: string; position: { x: number; y: number }; data: AudioNodeData }, hidden = false, orphaned = false): Node {
-  return { id: n.id, type: n.type, position: n.position, data: n.data as unknown as Record<string, unknown>, hidden, className: orphaned ? 'node-orphaned' : '' };
+  return { id: n.id, type: n.type, position: n.position, data: n.data as unknown as Record<string, unknown>, hidden, deletable: n.type !== 'master', className: orphaned ? 'node-orphaned' : '' };
 }
 
 function computeOrphanedIds(project: { nodes: { id: string; type: string }[]; edges: { source: string; target: string }[] }): Set<string> {
@@ -201,7 +201,7 @@ function Canvas() {
         // choice === 2 (Cancel) — do nothing
       }
       // Handle non-group nodes normally
-      toDelete.filter((n) => n.type !== 'group').forEach((n) => storeRemoveNode(n.id));
+      toDelete.filter((n) => n.type !== 'group' && n.type !== 'master').forEach((n) => storeRemoveNode(n.id));
       return false; // we handled store updates ourselves; tell RF not to apply its own deletion
     },
     [storeRemoveNode, removeGroupReconnect, removeGroupWithMembers]
