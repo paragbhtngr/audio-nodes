@@ -20,6 +20,17 @@ const ICON_PATH = path.join(process.env.APP_ROOT, 'build',
 
 let mainWindow: BrowserWindow | null = null;
 
+// Document state reported by the renderer, used to guard window close.
+let docDirty = false;
+let allowClose = false;   // set once the user has resolved the unsaved-changes prompt
+let quitting = false;     // close was triggered by app quit, so quit once the window closes
+
+const AUTOSAVE_PATH = () => path.join(app.getPath('userData'), 'autosave.json');
+
+async function clearAutosave() {
+  await fs.rm(AUTOSAVE_PATH(), { force: true });
+}
+
 function sendMenuAction(action: string) {
   mainWindow?.webContents.send('menu:action', action);
 }
@@ -106,7 +117,46 @@ function createWindow() {
     mainWindow.loadURL('app://localhost/');
   }
 
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('close', async (e) => {
+    if (allowClose || !docDirty) {
+      if (!docDirty) await clearAutosave().catch(() => {});
+      return;
+    }
+    e.preventDefault();
+    const win = mainWindow!;
+    clearHotkeys();
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      message: 'Do you want to save changes to this project?',
+      detail: "Your changes will be lost if you don't save them.",
+      buttons: ['Save', "Don't Save", 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+    });
+    applyHotkeys();
+    if (response === 0) {
+      // Renderer saves, then calls doc:closeConfirmed (or leaves the window open if the save is cancelled).
+      sendMenuAction('saveAndClose');
+    } else if (response === 1) {
+      allowClose = true;
+      await clearAutosave().catch(() => {});
+      closeNow();
+    } else {
+      quitting = false;
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    allowClose = false;
+    docDirty = false;
+  });
+}
+
+function closeNow() {
+  allowClose = true;
+  mainWindow?.close();
+  if (quitting) app.quit();
 }
 
 // IPC handlers
@@ -214,6 +264,39 @@ ipcMain.handle('project:save', async (_, filePath: string, json: string) => {
 ipcMain.handle('project:load', async (_, filePath: string) => {
   return fs.readFile(filePath, 'utf8');
 });
+
+// Crash-recovery autosave: a single backup of the open document in userData.
+ipcMain.handle('autosave:write', async (_evt, json: string) => {
+  if (allowClose) return; // window is closing; don't resurrect a discarded backup
+  const target = AUTOSAVE_PATH();
+  const tmp = `${target}.tmp`;
+  await fs.writeFile(tmp, json, 'utf8');
+  await fs.rename(tmp, target);
+});
+
+ipcMain.handle('autosave:read', async () => {
+  try { return await fs.readFile(AUTOSAVE_PATH(), 'utf8'); } catch { return null; }
+});
+
+ipcMain.handle('autosave:clear', () => clearAutosave());
+
+ipcMain.handle('doc:setState', (_evt, state: { dirty: boolean; filePath: string | null; title: string }) => {
+  docDirty = state.dirty;
+  if (!mainWindow) return;
+  mainWindow.setTitle(state.title);
+  if (process.platform === 'darwin') {
+    mainWindow.setDocumentEdited(state.dirty);
+    mainWindow.setRepresentedFilename(state.filePath ?? '');
+  }
+});
+
+ipcMain.handle('doc:closeConfirmed', async () => {
+  allowClose = true;
+  await clearAutosave().catch(() => {});
+  closeNow();
+});
+
+ipcMain.handle('doc:closeCancelled', () => { quitting = false; });
 
 ipcMain.handle('fs:checkExists', async (_evt, paths: string[]) => {
   const missing: string[] = [];
@@ -360,6 +443,8 @@ app.on('browser-window-blur', () => clearHotkeys());
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
+
+app.on('before-quit', () => { quitting = true; });
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();

@@ -20,6 +20,14 @@ export interface AudioNodesAPI {
   saveProject: (filePath: string, json: string) => Promise<void>;
   loadProject: (filePath: string) => Promise<string>;
 
+  // Crash-recovery autosave + document state
+  autosaveWrite: (json: string) => Promise<void>;
+  autosaveRead: () => Promise<string | null>;
+  autosaveClear: () => Promise<void>;
+  setDocumentState: (state: { dirty: boolean; filePath: string | null; title: string }) => Promise<void>;
+  confirmClose: () => Promise<void>;
+  cancelClose: () => Promise<void>;
+
   checkExists: (paths: string[]) => Promise<string[]>;
   setRecentProjects: (paths: string[]) => Promise<void>;
 

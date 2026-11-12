@@ -16,7 +16,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useShallow } from 'zustand/react/shallow';
-import { useStore } from '../state/store';
+import { useStore, captureGroupStates, sceneDiffersFromLive } from '../state/store';
+import { newDocument, openDocument, saveDocument, saveAndClose } from '../state/document';
 import { MasterOutNode } from '../components/nodes/MasterOutNode';
 import { SoundNode } from '../components/nodes/SoundNode';
 import { GroupNode } from '../components/nodes/GroupNode';
@@ -69,27 +70,6 @@ function collapsedHiddenIds(project: { nodes: { id: string; type: string; data: 
   return new Set(
     project.edges.filter((e) => collapsedGroupIds.has(e.target)).map((e) => e.source)
   );
-}
-
-// Serialize paths to relative before saving, restore after loading
-async function serializeProject(project: object, projectPath: string): Promise<string> {
-  if (!window.audioNodes) return JSON.stringify(project, null, 2);
-  const clone = structuredClone(project) as { library: { path: string }[] };
-  for (const file of clone.library) {
-    file.path = await window.audioNodes.relativizePath(projectPath, file.path);
-  }
-  return JSON.stringify(clone, null, 2);
-}
-
-async function deserializeProject(json: string, projectPath: string): Promise<object> {
-  const parsed = JSON.parse(json) as { library: { path: string }[] };
-  if (!window.audioNodes) return parsed;
-  for (const file of parsed.library) {
-    if (!file.path.startsWith('/')) {
-      file.path = await window.audioNodes.absolutizePath(projectPath, file.path);
-    }
-  }
-  return parsed;
 }
 
 function Canvas() {
@@ -403,64 +383,144 @@ function LibraryItem({ file }: { file: AudioFile }) {
 
 function ScenesPanel() {
   const scenes = useStore((s) => s.project.scenes);
-  const addScene = useStore((s) => s.addScene);
-  const deleteScene = useStore((s) => s.deleteScene);
-  const renameScene = useStore((s) => s.renameScene);
+  const currentSceneId = useStore((s) => s.currentSceneId);
+  const untitledScene = useStore((s) => s.untitledScene);
+  const currentModified = useStore((s) => {
+    const cur = s.project.scenes.find((sc) => sc.id === s.currentSceneId);
+    return !!cur && sceneDiffersFromLive(cur.groupStates, captureGroupStates(s.project));
+  });
+  const { saveSceneAs, saveCurrentScene, newScene, setCurrentScene, deleteScene, renameScene } = useStore(useShallow((s) => ({
+    saveSceneAs: s.saveSceneAs, saveCurrentScene: s.saveCurrentScene, newScene: s.newScene,
+    setCurrentScene: s.setCurrentScene, deleteScene: s.deleteScene, renameScene: s.renameScene,
+  })));
   const [crossfadeDur, setCrossfadeDur] = useState(2);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [naming, setNaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
 
-  if (scenes.length === 0 && true) {
-    return (
-      <div className="sidebar__section">
-        <div className="sidebar__section-header">
-          <h2>Scenes</h2>
-          <button className="an-btn" onClick={() => addScene(`Scene ${scenes.length + 1}`)}>+</button>
-        </div>
-        <p className="hint">Capture group states to recall later.</p>
-      </div>
-    );
-  }
+  const onUntitled = currentSceneId === null;
+  const showUntitled = onUntitled || untitledScene !== null;
+
+  const startNaming = () => {
+    let n = scenes.length + 1;
+    while (scenes.some((sc) => sc.name === `Scene ${n}`)) n++;
+    setNameDraft(`Scene ${n}`);
+    setNaming(true);
+  };
+  const commitName = () => {
+    const name = nameDraft.trim();
+    if (name) saveSceneAs(name);
+    setNaming(false);
+  };
+
+  const recall = (sc: Scene) => {
+    setCurrentScene(sc.id); // stashes the Untitled scene first if we're leaving it
+    audioEngine.recallScene(sc, crossfadeDur);
+  };
+  const recallUntitled = () => {
+    if (!untitledScene) return;
+    const states = untitledScene;
+    setCurrentScene(null);
+    audioEngine.recallScene({ id: 'untitled', name: 'Untitled scene', groupStates: states }, crossfadeDur);
+  };
+  const startNewScene = async () => {
+    if (untitledScene && window.audioNodes) {
+      const choice = await window.audioNodes.showMessageBox({
+        title: 'New scene',
+        message: 'Discard the unsaved Untitled scene and start a new one from what is playing now?',
+        buttons: ['Start New Scene', 'Cancel'],
+      });
+      if (choice !== 0) return;
+    }
+    newScene();
+  };
 
   return (
     <div className="sidebar__section">
       <div className="sidebar__section-header">
         <h2>Scenes</h2>
-        <button className="an-btn" onClick={() => addScene(`Scene ${scenes.length + 1}`)}>+</button>
+        <div className="scenes__header-actions">
+          <button className="an-btn" onClick={startNewScene} disabled={onUntitled}
+            title="Start a new untitled scene from what's playing now">New</button>
+          <button className="an-btn" onClick={startNaming}
+            title="Save what's playing now as a new named scene">Save As…</button>
+        </div>
       </div>
-      <div className="scenes__fade-row">
-        <span className="an-node__label">Fade</span>
-        <input type="range" className="insp__slider" min={0.5} max={10} step={0.5}
-          value={crossfadeDur} style={rangeFill(crossfadeDur, 0.5, 10)} onChange={(e) => setCrossfadeDur(parseFloat(e.target.value))} />
-        <span className="an-node__value">{crossfadeDur}s</span>
-      </div>
+      {scenes.length > 0 && (
+        <div className="scenes__fade-row">
+          <span className="an-node__label">Fade</span>
+          <input type="range" className="insp__slider" min={0.5} max={10} step={0.5}
+            value={crossfadeDur} style={rangeFill(crossfadeDur, 0.5, 10)} onChange={(e) => setCrossfadeDur(parseFloat(e.target.value))} />
+          <span className="an-node__value">{crossfadeDur}s</span>
+        </div>
+      )}
       <ul className="library-list">
-        {scenes.map((sc: Scene) => (
-          <li key={sc.id} className="library-item">
-            {editingId === sc.id ? (
-              <input
-                className="library-item__rename"
-                value={draft}
-                autoFocus
-                onChange={(e) => setDraft(e.target.value)}
-                onBlur={() => { renameScene(sc.id, draft || sc.name); setEditingId(null); }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { renameScene(sc.id, draft || sc.name); setEditingId(null); }
-                  if (e.key === 'Escape') setEditingId(null);
-                  e.stopPropagation();
-                }}
-              />
-            ) : (
-              <span className="library-item__name" onDoubleClick={() => { setDraft(sc.name); setEditingId(sc.id); }}>
-                {sc.name}
-              </span>
-            )}
-            <button className="an-btn an-btn--play" style={{ padding: '2px 6px', fontSize: 11 }}
-              onClick={() => audioEngine.recallScene(sc, crossfadeDur)}>▶</button>
-            <button className="library-item__remove" onClick={() => deleteScene(sc.id)}>×</button>
+        {naming && (
+          <li className="library-item library-item--current">
+            <input
+              className="library-item__rename"
+              value={nameDraft}
+              autoFocus
+              placeholder="Scene name"
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={() => setNaming(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitName();
+                if (e.key === 'Escape') setNaming(false);
+                e.stopPropagation();
+              }}
+            />
           </li>
-        ))}
+        )}
+        {showUntitled && !(naming && onUntitled) && (
+          <li className={`library-item scene-item--untitled${onUntitled ? ' library-item--current' : ''}`}
+            title={onUntitled ? 'The live mix. Save it to keep it as a named scene.' : 'Unsaved scene from earlier'}>
+            <span className="library-item__name">Untitled scene</span>
+            {onUntitled ? (
+              <button className="an-btn scene-item__save" onClick={startNaming}>Save…</button>
+            ) : (
+              <button className="an-btn an-btn--play scene-item__play" onClick={recallUntitled} title="Recall">▶</button>
+            )}
+          </li>
+        )}
+        {scenes.map((sc: Scene) => {
+          const isCurrent = sc.id === currentSceneId;
+          return (
+            <li key={sc.id} className={`library-item${isCurrent ? ' library-item--current' : ''}`}>
+              {editingId === sc.id ? (
+                <input
+                  className="library-item__rename"
+                  value={draft}
+                  autoFocus
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={() => { renameScene(sc.id, draft || sc.name); setEditingId(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { renameScene(sc.id, draft || sc.name); setEditingId(null); }
+                    if (e.key === 'Escape') setEditingId(null);
+                    e.stopPropagation();
+                  }}
+                />
+              ) : (
+                <span className="library-item__name" onDoubleClick={() => { setDraft(sc.name); setEditingId(sc.id); }}
+                  title="Double-click to rename">
+                  {sc.name}{isCurrent && currentModified && <span className="scene-item__modified" title="Modified since saved"> •</span>}
+                </span>
+              )}
+              {isCurrent && currentModified && (
+                <button className="an-btn scene-item__save" onClick={saveCurrentScene}
+                  title="Update this scene with what's playing now">Save</button>
+              )}
+              <button className="an-btn an-btn--play scene-item__play" onClick={() => recall(sc)} title="Recall">▶</button>
+              <button className="library-item__remove" onClick={() => deleteScene(sc.id)} title="Delete scene">×</button>
+            </li>
+          );
+        })}
       </ul>
+      {scenes.length === 0 && !naming && (
+        <p className="hint">The live mix is the Untitled scene. Save it to recall it later.</p>
+      )}
     </div>
   );
 }
@@ -683,10 +743,6 @@ function HotkeyHandler() {
 }
 
 function MenuHandler() {
-  const { newProject, setProject, setFilePath } = useStore(useShallow((s) => ({ newProject: s.newProject, setProject: s.setProject, setFilePath: s.setFilePath })));
-  const filePath = useStore((s) => s.filePath);
-  const project = useStore((s) => s.project);
-  const addRecent = useRecentStore((s) => s.add);
   const clearRecent = useRecentStore((s) => s.clear);
   const recentPaths = useRecentStore((s) => s.paths);
 
@@ -695,42 +751,18 @@ function MenuHandler() {
     if (window.audioNodes) window.audioNodes.setRecentProjects(recentPaths);
   }, [recentPaths]);
 
-  const openProject = async (path: string) => {
-    const json = await window.audioNodes.loadProject(path);
-    const parsed = await deserializeProject(json, path);
-    setProject(parsed as Parameters<typeof setProject>[0]);
-    setFilePath(path);
-    addRecent(path);
-  };
-
   useEffect(() => {
     if (!window.audioNodes) return;
     return window.audioNodes.onMenuAction(async (action) => {
-      if (action === 'new') {
-        newProject();
-      } else if (action === 'open' || action.startsWith('open:')) {
-        const path = action.startsWith('open:') ? action.slice(5) : await window.audioNodes.showOpenDialog();
-        if (!path) return;
-        await openProject(path);
-      } else if (action === 'save') {
-        const savePath = filePath ?? (await window.audioNodes.showSaveDialog(project.name));
-        if (!savePath) return;
-        const json = await serializeProject(project, savePath);
-        await window.audioNodes.saveProject(savePath, json);
-        setFilePath(savePath);
-        addRecent(savePath);
-      } else if (action === 'saveAs') {
-        const savePath = await window.audioNodes.showSaveDialog(project.name);
-        if (!savePath) return;
-        const json = await serializeProject(project, savePath);
-        await window.audioNodes.saveProject(savePath, json);
-        setFilePath(savePath);
-        addRecent(savePath);
-      } else if (action === 'clearRecent') {
-        clearRecent();
-      }
+      if (action === 'new') await newDocument();
+      else if (action === 'open') await openDocument();
+      else if (action.startsWith('open:')) await openDocument(action.slice(5));
+      else if (action === 'save') await saveDocument();
+      else if (action === 'saveAs') await saveDocument(true);
+      else if (action === 'saveAndClose') await saveAndClose();
+      else if (action === 'clearRecent') clearRecent();
     });
-  }, [newProject, setProject, setFilePath, filePath, project, addRecent, clearRecent, openProject]);
+  }, [clearRecent]);
 
   return null;
 }

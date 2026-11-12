@@ -47,6 +47,24 @@ body,
   z-index: 50;
 }
 
+.titlebar-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.titlebar-title__edited {
+  opacity: 0.7;
+}
+
 .app-header {
   padding: 8px 16px;
   border-bottom: 1px solid var(--border);
@@ -315,6 +333,30 @@ body,
 }
 
 /* Scenes panel */
+.scenes__header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.library-item--current {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.scene-item--untitled .library-item__name {
+  font-style: italic;
+}
+
+.scene-item__modified {
+  color: var(--accent);
+}
+
+.scene-item__save,
+.scene-item__play {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
 .scenes__fade-row {
   display: flex;
   align-items: center;

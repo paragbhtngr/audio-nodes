@@ -38,6 +38,24 @@ contextBridge.exposeInMainWorld('audioNodes', {
   absolutizePath: (projectPath: string, relPath: string): Promise<string> =>
     ipcRenderer.invoke('path:absolutize', projectPath, relPath),
 
+  autosaveWrite: (json: string): Promise<void> =>
+    ipcRenderer.invoke('autosave:write', json),
+
+  autosaveRead: (): Promise<string | null> =>
+    ipcRenderer.invoke('autosave:read'),
+
+  autosaveClear: (): Promise<void> =>
+    ipcRenderer.invoke('autosave:clear'),
+
+  setDocumentState: (state: { dirty: boolean; filePath: string | null; title: string }): Promise<void> =>
+    ipcRenderer.invoke('doc:setState', state),
+
+  confirmClose: (): Promise<void> =>
+    ipcRenderer.invoke('doc:closeConfirmed'),
+
+  cancelClose: (): Promise<void> =>
+    ipcRenderer.invoke('doc:closeCancelled'),
+
   checkExists: (paths: string[]): Promise<string[]> =>
     ipcRenderer.invoke('fs:checkExists', paths),
 

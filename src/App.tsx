@@ -1,11 +1,32 @@
 import { useEffect } from "react";
 import { EditView } from "./views/EditView";
 import { audioEngine } from "./audio/engine";
+import { useStore, selectIsDirty } from "./state/store";
+import { startDocumentSession } from "./state/document";
+
+function TitleBar() {
+  const name = useStore((s) => s.project.name);
+  const dirty = useStore(selectIsDirty);
+  // Windows/Linux show document.title in the native title bar; macOS uses a hidden-inset bar.
+  const showTitle = window.audioNodes?.platform === 'darwin';
+  return (
+    <div className="titlebar-drag">
+      {showTitle && <span className="titlebar-title">
+        {name}
+        {dirty && <span className="titlebar-title__edited"> — Edited</span>}
+      </span>}
+    </div>
+  );
+}
 
 export function App() {
   useEffect(() => {
     audioEngine.init();
     return () => audioEngine.destroy();
+  }, []);
+
+  useEffect(() => {
+    startDocumentSession();
   }, []);
 
   useEffect(() => {
@@ -28,7 +49,7 @@ export function App() {
 
   return (
     <div className="app-root">
-      <div className="titlebar-drag" />
+      <TitleBar />
       <main className="app-main">
         <EditView />
       </main>

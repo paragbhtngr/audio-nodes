@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type {
   Project, ProjectNode, ProjectEdge, AudioFile, AudioNodeData,
   SoundNodeData, EffectType, Scene, Prefab, YouTubeNodeData,
@@ -7,7 +6,7 @@ import type {
 
 export const MASTER_NODE_ID = 'master-out';
 
-function defaultProject(): Project {
+export function defaultProject(): Project {
   return {
     schemaVersion: 1,
     name: 'Untitled Project',
@@ -26,17 +25,54 @@ function defaultProject(): Project {
   };
 }
 
+export type GroupState = Scene['groupStates'][number];
+
+/** Snapshot the live state of every group: its volume, and whether any member is playing. */
+export function captureGroupStates(project: Project): GroupState[] {
+  return project.nodes
+    .filter((n) => n.type === 'group')
+    .map((n) => {
+      const memberIds = project.edges.filter((e) => e.target === n.id).map((e) => e.source);
+      const active = memberIds.some((id) => {
+        const m = project.nodes.find((x) => x.id === id);
+        return !!m && !!(m.data as { playing?: boolean }).playing;
+      });
+      return { groupId: n.id, volume: (n.data as { volume: number }).volume, active };
+    });
+}
+
+/** True when a saved scene no longer matches the live group states (ignoring groups deleted since). */
+export function sceneDiffersFromLive(scene: GroupState[], live: GroupState[]): boolean {
+  const saved = new Map(scene.map((g) => [g.groupId, g]));
+  return live.some((g) => {
+    const s = saved.get(g.groupId);
+    if (!s) return g.active;
+    return s.active !== g.active || Math.abs(s.volume - g.volume) > 0.001;
+  });
+}
+
 function makeId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-interface StoreState {
+export interface SceneSession {
+  /** Named scene the live state was last recalled from / saved as; null = the Untitled scene. */
+  currentSceneId: string | null;
+  /** Untitled scene's group states, stashed while a named scene is current. */
+  untitledScene: GroupState[] | null;
+}
+
+interface StoreState extends SceneSession {
   project: Project;
   selectedNodeId: string | null;
   filePath: string | null;
+  /** The project as last loaded from / written to disk; the document is dirty when it differs. */
+  savedProject: Project | null;
 
-  setProject: (project: Project) => void;
-  setFilePath: (path: string | null) => void;
+  /** Replace the open document. `dirty` marks it as having unsaved changes (e.g. crash recovery). */
+  loadProject: (project: Project, filePath: string | null, opts?: { dirty?: boolean; scenes?: SceneSession }) => void;
+  /** Record that `source` (the project at save time) was written to `filePath` as `saved`. */
+  markSaved: (source: Project, saved: Project, filePath: string) => void;
   newProject: () => void;
   selectNode: (id: string | null) => void;
 
@@ -54,7 +90,14 @@ interface StoreState {
 
   updateLibraryFileDuration: (fileId: string, duration: number) => void;
 
-  addScene: (name: string) => void;
+  /** Capture the live state as a new named scene and make it current. */
+  saveSceneAs: (name: string) => void;
+  /** Overwrite the current named scene with the live state. */
+  saveCurrentScene: () => void;
+  /** Leave the current named scene and start a fresh Untitled scene from the live state. */
+  newScene: () => void;
+  /** Switch which scene is current (call before recalling it, so the Untitled state gets stashed). */
+  setCurrentScene: (id: string | null) => void;
   deleteScene: (id: string) => void;
   renameScene: (id: string, name: string) => void;
 
@@ -74,42 +117,40 @@ interface StoreState {
   removeHotkey: (key: string) => void;
 }
 
-// persist writes the whole project synchronously on every set(); coalesce writes so rapid
-// updates (playback toggles, volume sliders) don't serialize the project each time.
-let pendingWrite: ReturnType<typeof setTimeout> | null = null;
-let pendingValue: { name: string; value: string } | null = null;
-
-function flushPendingWrite() {
-  if (pendingWrite) clearTimeout(pendingWrite);
-  pendingWrite = null;
-  if (!pendingValue) return;
-  const { name, value } = pendingValue;
-  pendingValue = null;
-  try { localStorage.setItem(name, value); } catch { /* storage unavailable or full */ }
-}
-
-const debouncedStorage: StateStorage = {
-  getItem: (name) => localStorage.getItem(name),
-  setItem: (name, value) => {
-    pendingValue = { name, value };
-    if (pendingWrite) clearTimeout(pendingWrite);
-    pendingWrite = setTimeout(flushPendingWrite, 500);
-  },
-  removeItem: (name) => localStorage.removeItem(name),
-};
-
-if (typeof window !== 'undefined') window.addEventListener('beforeunload', flushPendingWrite);
+const freshScenes = (): SceneSession => ({ currentSceneId: null, untitledScene: null });
 
 export const useStore = create<StoreState>()(
-  persist(
-    (set) => ({
-      project: defaultProject(),
+    (set) => {
+      const initial = defaultProject();
+      return {
+      project: initial,
+      savedProject: initial,
       selectedNodeId: null,
       filePath: null,
+      ...freshScenes(),
 
-      setProject: (project) => set({ project, selectedNodeId: null }),
-      setFilePath: (filePath) => set({ filePath }),
-      newProject: () => set({ project: defaultProject(), filePath: null, selectedNodeId: null }),
+      loadProject: (project, filePath, opts) =>
+        set({
+          project,
+          filePath,
+          savedProject: opts?.dirty ? null : project,
+          selectedNodeId: null,
+          ...(opts?.scenes ?? freshScenes()),
+        }),
+      markSaved: (source, saved, filePath) =>
+        set((s) => {
+          // Edits made while the write was in flight keep the document dirty.
+          const unchanged = s.project === source;
+          return {
+            filePath,
+            savedProject: saved,
+            project: unchanged ? saved : { ...s.project, name: saved.name },
+          };
+        }),
+      newProject: () => {
+        const project = defaultProject();
+        set({ project, savedProject: project, filePath: null, selectedNodeId: null, ...freshScenes() });
+      },
       selectNode: (selectedNodeId) => set({ selectedNodeId }),
 
       addAudioFile: (file) =>
@@ -323,29 +364,52 @@ export const useStore = create<StoreState>()(
         })),
 
       updateLibraryFileDuration: (fileId, duration) =>
-        set((s) => ({
-          project: { ...s.project, library: s.project.library.map((f) => f.id === fileId ? { ...f, duration } : f) },
-        })),
-
-      addScene: (name) =>
         set((s) => {
-          const project = s.project;
-          const groupStates = project.nodes
-            .filter((n) => n.type === 'group')
-            .map((n) => {
-              const memberIds = project.edges.filter((e) => e.target === n.id).map((e) => e.source);
-              const active = memberIds.some((id) => {
-                const m = project.nodes.find((x) => x.id === id);
-                return m && (m.data as { playing?: boolean }).playing;
-              });
-              return { groupId: n.id, volume: (n.data as { volume: number }).volume, active };
-            });
-          const scene: Scene = { id: `scene-${makeId()}`, name, groupStates };
-          return { project: { ...project, scenes: [...project.scenes, scene] } };
+          // Durations are derived metadata filled in after load; they shouldn't dirty a clean document.
+          const project = { ...s.project, library: s.project.library.map((f) => f.id === fileId ? { ...f, duration } : f) };
+          return { project, savedProject: s.savedProject === s.project ? project : s.savedProject };
+        }),
+
+      saveSceneAs: (name) =>
+        set((s) => {
+          const scene: Scene = { id: `scene-${makeId()}`, name, groupStates: captureGroupStates(s.project) };
+          return {
+            project: { ...s.project, scenes: [...s.project.scenes, scene] },
+            currentSceneId: scene.id,
+            // Saving the Untitled scene turns it into this named scene.
+            untitledScene: s.currentSceneId === null ? null : s.untitledScene,
+          };
+        }),
+
+      saveCurrentScene: () =>
+        set((s) => {
+          if (!s.currentSceneId) return {};
+          const groupStates = captureGroupStates(s.project);
+          return {
+            project: {
+              ...s.project,
+              scenes: s.project.scenes.map((sc) => sc.id === s.currentSceneId ? { ...sc, groupStates } : sc),
+            },
+          };
+        }),
+
+      newScene: () => set({ currentSceneId: null, untitledScene: null }),
+
+      setCurrentScene: (id) =>
+        set((s) => {
+          if (id === s.currentSceneId) return {};
+          if (id === null) return { currentSceneId: null, untitledScene: null };
+          return {
+            currentSceneId: id,
+            untitledScene: s.currentSceneId === null ? captureGroupStates(s.project) : s.untitledScene,
+          };
         }),
 
       deleteScene: (id) =>
-        set((s) => ({ project: { ...s.project, scenes: s.project.scenes.filter((sc) => sc.id !== id) } })),
+        set((s) => ({
+          project: { ...s.project, scenes: s.project.scenes.filter((sc) => sc.id !== id) },
+          ...(s.currentSceneId === id ? { currentSceneId: null, untitledScene: null } : {}),
+        })),
 
       renameScene: (id, name) =>
         set((s) => ({ project: { ...s.project, scenes: s.project.scenes.map((sc) => sc.id === id ? { ...sc, name } : sc) } })),
@@ -363,11 +427,8 @@ export const useStore = create<StoreState>()(
           const { [key]: _removed, ...rest } = s.project.hotkeys;
           return { project: { ...s.project, hotkeys: rest } };
         }),
-    }),
-    {
-      name: 'audio-nodes-session',
-      storage: createJSONStorage(() => debouncedStorage),
-      partialize: (state) => ({ project: state.project, filePath: state.filePath }),
+      };
     }
-  )
 );
+
+export const selectIsDirty = (s: { project: Project; savedProject: Project | null }) => s.project !== s.savedProject;
