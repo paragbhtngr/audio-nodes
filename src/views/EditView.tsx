@@ -483,13 +483,19 @@ function ScenesPanel() {
           const isCurrent = sc.id === currentSceneId;
           const name = label(sc);
           return (
-            <li key={sc.id} className={`library-item${isCurrent ? ' library-item--current' : ''}${sc.untitled ? ' scene-item--untitled' : ''}`}>
+            <li key={sc.id}
+              className={`library-item scene-item${isCurrent ? ' library-item--current' : ''}${sc.untitled ? ' scene-item--untitled' : ''}`}
+              onClick={() => { if (editingId !== sc.id) goTo(sc.id); }}
+              onDoubleClick={() => startRename(sc)}
+              title={isCurrent ? undefined : 'Click to switch to this scene'}>
               {editingId === sc.id ? (
                 <input
                   className="library-item__rename"
                   value={draft}
                   autoFocus
                   placeholder="Scene name"
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
                   onFocus={(e) => e.target.select()}
                   onChange={(e) => setDraft(e.target.value)}
                   onBlur={() => commitRename(sc)}
@@ -500,23 +506,21 @@ function ScenesPanel() {
                   }}
                 />
               ) : (
-                <span className="library-item__name" onDoubleClick={() => startRename(sc)}
-                  title={sc.untitled ? 'Unnamed scene. Double-click or Save… to name it.' : 'Double-click to rename'}>
-                  {name}
-                </span>
+                <span className="library-item__name">{name}</span>
               )}
-              {sc.untitled && editingId !== sc.id && (
-                <button className="an-btn scene-item__save" onClick={() => startRename(sc)} title="Name this scene">Save…</button>
-              )}
-              {!isCurrent && (
-                <button className="an-btn an-btn--play scene-item__play" onClick={() => goTo(sc.id)} title="Switch to this scene">▶</button>
-              )}
-              <button className="library-item__remove" onClick={() => remove(sc)} title="Delete scene">×</button>
+              <button className="library-item__remove scene-item__edit"
+                onClick={(e) => { e.stopPropagation(); startRename(sc); }}
+                onDoubleClick={(e) => e.stopPropagation()}
+                title={sc.untitled ? 'Name this scene' : 'Rename scene'}>✎</button>
+              <button className="library-item__remove"
+                onClick={(e) => { e.stopPropagation(); remove(sc); }}
+                onDoubleClick={(e) => e.stopPropagation()}
+                title="Delete scene">×</button>
             </li>
           );
         })}
         {duplicating && (
-          <li className="library-item">
+          <li className="library-item scene-item">
             <input
               className="library-item__rename"
               value={draft}
@@ -534,7 +538,7 @@ function ScenesPanel() {
           </li>
         )}
       </ul>
-      <p className="hint">Each scene has its own canvas. Switching scenes fades one out and the next in.</p>
+      <p className="hint">Each scene has its own canvas. Click a scene to switch to it (with a fade); double-click to rename.</p>
     </div>
   );
 }

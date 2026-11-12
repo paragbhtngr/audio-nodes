@@ -343,18 +343,31 @@ body,
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+.scene-item {
+  box-sizing: border-box;
+  height: 32px;
+  cursor: pointer;
+}
+
+.scene-item .library-item__name {
+  cursor: pointer;
+}
+
+.scene-item .library-item__rename {
+  box-sizing: border-box;
+  height: 22px;
+}
+
 .scene-item--untitled .library-item__name {
   font-style: italic;
 }
 
-.scene-item__modified {
-  color: var(--accent);
+.scene-item__edit {
+  font-size: 13px;
 }
 
-.scene-item__save,
-.scene-item__play {
-  padding: 2px 6px;
-  font-size: 11px;
+.scene-item__edit:hover {
+  color: var(--accent);
 }
 
 .scenes__fade-row {
