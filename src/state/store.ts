@@ -1,68 +1,110 @@
 import { create } from 'zustand';
 import type {
   Project, ProjectNode, ProjectEdge, AudioFile, AudioNodeData,
-  SoundNodeData, EffectType, Scene, Prefab, YouTubeNodeData,
+  SoundNodeData, EffectType, Scene, SceneCanvas, Prefab, YouTubeNodeData,
+  ProjectFileV1, ProjectFileV2,
 } from '../types';
 
 export const MASTER_NODE_ID = 'master-out';
-
-export function defaultProject(): Project {
-  return {
-    schemaVersion: 1,
-    name: 'Untitled Project',
-    library: [],
-    nodes: [
-      {
-        id: MASTER_NODE_ID,
-        type: 'master',
-        position: { x: 700, y: 300 },
-        data: { kind: 'master', volume: 1 },
-      },
-    ],
-    edges: [],
-    hotkeys: {},
-    scenes: [],
-  };
-}
-
-export type GroupState = Scene['groupStates'][number];
-
-/** Snapshot the live state of every group: its volume, and whether any member is playing. */
-export function captureGroupStates(project: Project): GroupState[] {
-  return project.nodes
-    .filter((n) => n.type === 'group')
-    .map((n) => {
-      const memberIds = project.edges.filter((e) => e.target === n.id).map((e) => e.source);
-      const active = memberIds.some((id) => {
-        const m = project.nodes.find((x) => x.id === id);
-        return !!m && !!(m.data as { playing?: boolean }).playing;
-      });
-      return { groupId: n.id, volume: (n.data as { volume: number }).volume, active };
-    });
-}
-
-/** True when a saved scene no longer matches the live group states (ignoring groups deleted since). */
-export function sceneDiffersFromLive(scene: GroupState[], live: GroupState[]): boolean {
-  const saved = new Map(scene.map((g) => [g.groupId, g]));
-  return live.some((g) => {
-    const s = saved.get(g.groupId);
-    if (!s) return g.active;
-    return s.active !== g.active || Math.abs(s.volume - g.volume) > 0.001;
-  });
-}
+export const UNTITLED_SCENE_NAME = 'Untitled scene';
 
 function makeId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export interface SceneSession {
-  /** Named scene the live state was last recalled from / saved as; null = the Untitled scene. */
-  currentSceneId: string | null;
-  /** Untitled scene's group states, stashed while a named scene is current. */
-  untitledScene: GroupState[] | null;
+// ── Scenes ─────────────────────────────────────────────────────────────────────────────────
+
+export function emptyCanvas(): SceneCanvas {
+  return {
+    nodes: [{ id: MASTER_NODE_ID, type: 'master', position: { x: 700, y: 300 }, data: { kind: 'master', volume: 1 } }],
+    edges: [],
+    hotkeys: {},
+  };
 }
 
-interface StoreState extends SceneSession {
+export function isEmptyCanvas(c: SceneCanvas): boolean {
+  return c.edges.length === 0 && c.nodes.every((n) => n.type === 'master');
+}
+
+function newUntitledScene(): Scene {
+  return { id: `scene-${makeId()}`, name: UNTITLED_SCENE_NAME, untitled: true, ...emptyCanvas() };
+}
+
+/** The project's scenes with the live canvas written back into the current scene. */
+export function flushScenes(p: Project): Scene[] {
+  return p.scenes.map((sc) =>
+    sc.id !== p.currentSceneId || (sc.nodes === p.nodes && sc.edges === p.edges && sc.hotkeys === p.hotkeys)
+      ? sc
+      : { ...sc, nodes: p.nodes, edges: p.edges, hotkeys: p.hotkeys }
+  );
+}
+
+/** Make `id` the current scene, loading its canvas as the live one. */
+function loadScene(p: Omit<Project, 'nodes' | 'edges' | 'hotkeys' | 'currentSceneId'>, id: string): Project {
+  const sc = p.scenes.find((x) => x.id === id)!;
+  return { ...p, currentSceneId: id, nodes: sc.nodes, edges: sc.edges, hotkeys: sc.hotkeys };
+}
+
+/** Build an in-memory project that opens on an empty Untitled scene (reusing one if the file has it). */
+export function projectFromFile(file: ProjectFileV2): Project {
+  const scenes = [...file.scenes];
+  let start = scenes.find((sc) => sc.untitled && isEmptyCanvas(sc));
+  if (!start) {
+    start = newUntitledScene();
+    scenes.push(start);
+  }
+  return loadScene({ schemaVersion: 2, name: file.name, library: file.library, scenes }, start.id);
+}
+
+export function defaultProject(): Project {
+  return projectFromFile({ schemaVersion: 2, name: 'Untitled Project', library: [], scenes: [] });
+}
+
+export function toProjectFile(p: Project): ProjectFileV2 {
+  return { schemaVersion: 2, name: p.name, library: p.library, scenes: flushScenes(p) };
+}
+
+/**
+ * Upgrade a parsed project file to v2. A v1 file had one shared canvas plus group-state
+ * snapshot scenes: the canvas becomes a "Main" scene and each snapshot becomes its own copy
+ * of the canvas with those group volumes / playing states applied.
+ */
+export function migrateProjectFile(raw: ProjectFileV1 | ProjectFileV2): ProjectFileV2 {
+  if (raw.schemaVersion === 2) return { ...raw, scenes: raw.scenes ?? [], library: raw.library ?? [] };
+  const base: SceneCanvas = { nodes: raw.nodes ?? emptyCanvas().nodes, edges: raw.edges ?? [], hotkeys: raw.hotkeys ?? {} };
+  const scenes: Scene[] = [{ id: `scene-${makeId()}`, name: 'Main', ...base }];
+  for (const old of raw.scenes ?? []) {
+    const states = new Map(old.groupStates.map((g) => [g.groupId, g]));
+    const memberOf = new Map(base.edges.filter((e) => states.has(e.target)).map((e) => [e.source, e.target]));
+    const nodes = base.nodes.map((n): ProjectNode => {
+      const gs = states.get(n.id);
+      if (gs && n.type === 'group') return { ...n, data: { ...n.data, volume: gs.volume } as AudioNodeData };
+      const group = memberOf.get(n.id);
+      if (group && 'playing' in n.data) return { ...n, data: { ...n.data, playing: states.get(group)!.active } as AudioNodeData };
+      return n;
+    });
+    scenes.push({ id: old.id, name: old.name, nodes, edges: base.edges, hotkeys: base.hotkeys });
+  }
+  return { schemaVersion: 2, name: raw.name, library: raw.library ?? [], scenes };
+}
+
+/** Structural (reference-per-scene) comparison, so switching scenes alone doesn't dirty the document. */
+export function isProjectDirty(project: Project, saved: Project | null): boolean {
+  if (!saved) return true;
+  if (project === saved) return false;
+  if (project.name !== saved.name || project.library !== saved.library) return true;
+  const a = flushScenes(project);
+  const b = flushScenes(saved);
+  return a.length !== b.length || a.some((sc, i) => {
+    const o = b[i];
+    return sc.id !== o.id || sc.name !== o.name || !!sc.untitled !== !!o.untitled
+      || sc.nodes !== o.nodes || sc.edges !== o.edges || sc.hotkeys !== o.hotkeys;
+  });
+}
+
+// ── Store ──────────────────────────────────────────────────────────────────────────────────
+
+interface StoreState {
   project: Project;
   selectedNodeId: string | null;
   filePath: string | null;
@@ -70,7 +112,7 @@ interface StoreState extends SceneSession {
   savedProject: Project | null;
 
   /** Replace the open document. `dirty` marks it as having unsaved changes (e.g. crash recovery). */
-  loadProject: (project: Project, filePath: string | null, opts?: { dirty?: boolean; scenes?: SceneSession }) => void;
+  loadProject: (project: Project, filePath: string | null, opts?: { dirty?: boolean }) => void;
   /** Record that `source` (the project at save time) was written to `filePath` as `saved`. */
   markSaved: (source: Project, saved: Project, filePath: string) => void;
   newProject: () => void;
@@ -90,16 +132,16 @@ interface StoreState extends SceneSession {
 
   updateLibraryFileDuration: (fileId: string, duration: number) => void;
 
-  /** Capture the live state as a new named scene and make it current. */
-  saveSceneAs: (name: string) => void;
-  /** Overwrite the current named scene with the live state. */
-  saveCurrentScene: () => void;
-  /** Leave the current named scene and start a fresh Untitled scene from the live state. */
+  /** Switch the canvas to another scene. An empty Untitled scene being left is discarded. */
+  switchScene: (id: string) => void;
+  /** Start a new, empty Untitled scene and switch to it. */
   newScene: () => void;
-  /** Switch which scene is current (call before recalling it, so the Untitled state gets stashed). */
-  setCurrentScene: (id: string | null) => void;
-  deleteScene: (id: string) => void;
+  /** Copy the current scene's canvas into a new named scene and switch to it. */
+  duplicateScene: (name: string) => void;
+  /** Rename a scene; naming an Untitled scene saves it as a named scene. */
   renameScene: (id: string, name: string) => void;
+  /** Delete a scene; deleting the current one switches to a neighbour (or a new Untitled scene). */
+  deleteScene: (id: string) => void;
 
   missingFileIds: Set<string>;
   setMissingFileIds: (ids: Set<string>) => void;
@@ -117,8 +159,6 @@ interface StoreState extends SceneSession {
   removeHotkey: (key: string) => void;
 }
 
-const freshScenes = (): SceneSession => ({ currentSceneId: null, untitledScene: null });
-
 export const useStore = create<StoreState>()(
     (set) => {
       const initial = defaultProject();
@@ -127,16 +167,9 @@ export const useStore = create<StoreState>()(
       savedProject: initial,
       selectedNodeId: null,
       filePath: null,
-      ...freshScenes(),
 
       loadProject: (project, filePath, opts) =>
-        set({
-          project,
-          filePath,
-          savedProject: opts?.dirty ? null : project,
-          selectedNodeId: null,
-          ...(opts?.scenes ?? freshScenes()),
-        }),
+        set({ project, filePath, savedProject: opts?.dirty ? null : project, selectedNodeId: null }),
       markSaved: (source, saved, filePath) =>
         set((s) => {
           // Edits made while the write was in flight keep the document dirty.
@@ -149,7 +182,7 @@ export const useStore = create<StoreState>()(
         }),
       newProject: () => {
         const project = defaultProject();
-        set({ project, savedProject: project, filePath: null, selectedNodeId: null, ...freshScenes() });
+        set({ project, savedProject: project, filePath: null, selectedNodeId: null });
       },
       selectNode: (selectedNodeId) => set({ selectedNodeId }),
 
@@ -367,52 +400,58 @@ export const useStore = create<StoreState>()(
         set((s) => {
           // Durations are derived metadata filled in after load; they shouldn't dirty a clean document.
           const project = { ...s.project, library: s.project.library.map((f) => f.id === fileId ? { ...f, duration } : f) };
-          return { project, savedProject: s.savedProject === s.project ? project : s.savedProject };
+          const clean = s.savedProject && !isProjectDirty(s.project, s.savedProject);
+          return { project, savedProject: clean ? { ...s.savedProject!, library: project.library } : s.savedProject };
         }),
 
-      saveSceneAs: (name) =>
+      switchScene: (id) =>
         set((s) => {
-          const scene: Scene = { id: `scene-${makeId()}`, name, groupStates: captureGroupStates(s.project) };
-          return {
-            project: { ...s.project, scenes: [...s.project.scenes, scene] },
-            currentSceneId: scene.id,
-            // Saving the Untitled scene turns it into this named scene.
-            untitledScene: s.currentSceneId === null ? null : s.untitledScene,
-          };
+          const p = s.project;
+          if (id === p.currentSceneId || !p.scenes.some((sc) => sc.id === id)) return {};
+          const scenes = flushScenes(p).filter((sc) =>
+            !(sc.id === p.currentSceneId && sc.untitled && isEmptyCanvas(sc)));
+          return { project: loadScene({ ...p, scenes }, id), selectedNodeId: null };
         }),
 
-      saveCurrentScene: () =>
+      newScene: () =>
         set((s) => {
-          if (!s.currentSceneId) return {};
-          const groupStates = captureGroupStates(s.project);
-          return {
-            project: {
-              ...s.project,
-              scenes: s.project.scenes.map((sc) => sc.id === s.currentSceneId ? { ...sc, groupStates } : sc),
-            },
-          };
+          const p = s.project;
+          const cur = flushScenes(p).find((sc) => sc.id === p.currentSceneId);
+          if (cur?.untitled && isEmptyCanvas(cur)) return {};
+          const scene = newUntitledScene();
+          return { project: loadScene({ ...p, scenes: [...flushScenes(p), scene] }, scene.id), selectedNodeId: null };
         }),
 
-      newScene: () => set({ currentSceneId: null, untitledScene: null }),
-
-      setCurrentScene: (id) =>
+      duplicateScene: (name) =>
         set((s) => {
-          if (id === s.currentSceneId) return {};
-          if (id === null) return { currentSceneId: null, untitledScene: null };
-          return {
-            currentSceneId: id,
-            untitledScene: s.currentSceneId === null ? captureGroupStates(s.project) : s.untitledScene,
-          };
+          const p = s.project;
+          const scenes = flushScenes(p);
+          const idx = scenes.findIndex((sc) => sc.id === p.currentSceneId);
+          // Node ids are scene-local, so the copy keeps them (ducking targets and hotkeys stay valid).
+          const copy: Scene = { id: `scene-${makeId()}`, name, nodes: p.nodes, edges: p.edges, hotkeys: p.hotkeys };
+          scenes.splice(idx + 1, 0, copy);
+          return { project: loadScene({ ...p, scenes }, copy.id) };
         }),
-
-      deleteScene: (id) =>
-        set((s) => ({
-          project: { ...s.project, scenes: s.project.scenes.filter((sc) => sc.id !== id) },
-          ...(s.currentSceneId === id ? { currentSceneId: null, untitledScene: null } : {}),
-        })),
 
       renameScene: (id, name) =>
-        set((s) => ({ project: { ...s.project, scenes: s.project.scenes.map((sc) => sc.id === id ? { ...sc, name } : sc) } })),
+        set((s) => ({
+          project: {
+            ...s.project,
+            scenes: s.project.scenes.map((sc) => sc.id === id ? { ...sc, name, untitled: false } : sc),
+          },
+        })),
+
+      deleteScene: (id) =>
+        set((s) => {
+          const p = s.project;
+          const idx = p.scenes.findIndex((sc) => sc.id === id);
+          if (idx < 0) return {};
+          const scenes = flushScenes(p).filter((sc) => sc.id !== id);
+          if (id !== p.currentSceneId) return { project: { ...p, scenes } };
+          const next = scenes[Math.min(idx, scenes.length - 1)] ?? newUntitledScene();
+          if (!scenes.includes(next)) scenes.push(next);
+          return { project: loadScene({ ...p, scenes }, next.id), selectedNodeId: null };
+        }),
 
       missingFileIds: new Set<string>(),
       setMissingFileIds: (ids) => set({ missingFileIds: ids }),
@@ -431,4 +470,5 @@ export const useStore = create<StoreState>()(
     }
 );
 
-export const selectIsDirty = (s: { project: Project; savedProject: Project | null }) => s.project !== s.savedProject;
+export const selectIsDirty = (s: { project: Project; savedProject: Project | null }) =>
+  isProjectDirty(s.project, s.savedProject);

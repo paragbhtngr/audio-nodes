@@ -1,17 +1,17 @@
 // Document lifecycle for the open project: save / open / new with unsaved-changes prompts,
 // a throttled crash-recovery autosave, and restoring that autosave on launch.
-import { useStore, selectIsDirty, type SceneSession } from './store';
+import { useStore, selectIsDirty, toProjectFile, migrateProjectFile, projectFromFile } from './store';
 import { useRecentStore } from './recentStore';
-import type { Project } from '../types';
+import type { Project, ProjectFileV1, ProjectFileV2 } from '../types';
 
 const AUTOSAVE_INTERVAL_MS = 1500;
 const LEGACY_SESSION_KEY = 'audio-nodes-session'; // pre-autosave localStorage persistence
 
-interface AutosaveFile extends SceneSession {
-  version: 1;
+interface AutosaveFile {
+  version: 2;
   savedAt: number;
   filePath: string | null;
-  project: Project; // library paths are absolute
+  project: Project; // in-memory form (current scene + live canvas); library paths are absolute
 }
 
 const api = () => (typeof window !== 'undefined' ? window.audioNodes : undefined);
@@ -24,20 +24,21 @@ export function projectNameFromPath(filePath: string): string {
 // ── Serialization (library paths are stored relative to the project file) ──────────────────
 
 async function serializeProject(project: Project, projectPath: string): Promise<string> {
+  const file = toProjectFile(project);
   const a = api();
-  if (!a) return JSON.stringify(project, null, 2);
-  const clone = structuredClone(project);
+  if (!a) return JSON.stringify(file, null, 2);
+  const clone = structuredClone(file);
   for (const file of clone.library) file.path = await a.relativizePath(projectPath, file.path);
   return JSON.stringify(clone, null, 2);
 }
 
 async function deserializeProject(json: string, projectPath: string): Promise<Project> {
-  const project = JSON.parse(json) as Project;
+  const file = migrateProjectFile(JSON.parse(json) as ProjectFileV1 | ProjectFileV2);
   const a = api();
   if (a) {
-    for (const file of project.library ?? []) file.path = await a.absolutizePath(projectPath, file.path);
+    for (const f of file.library) f.path = await a.absolutizePath(projectPath, f.path);
   }
-  return { ...project, scenes: project.scenes ?? [], hotkeys: project.hotkeys ?? {} };
+  return projectFromFile(file);
 }
 
 // ── Save / open / new ──────────────────────────────────────────────────────────────────────
@@ -99,10 +100,11 @@ function readLegacySession(): AutosaveFile | null {
   try {
     const raw = localStorage.getItem(LEGACY_SESSION_KEY);
     if (!raw) return null;
-    const { state } = JSON.parse(raw) as { state?: { project?: Project; filePath?: string | null } };
-    const project = state?.project;
-    if (!project || (project.nodes.length <= 1 && project.library.length === 0)) return null;
-    return { version: 1, savedAt: 0, filePath: state?.filePath ?? null, project, currentSceneId: null, untitledScene: null };
+    const { state } = JSON.parse(raw) as { state?: { project?: ProjectFileV1; filePath?: string | null } };
+    const legacy = state?.project;
+    if (!legacy || ((legacy.nodes?.length ?? 0) <= 1 && (legacy.library?.length ?? 0) === 0)) return null;
+    const project = projectFromFile(migrateProjectFile({ ...legacy, schemaVersion: 1 }));
+    return { version: 2, savedAt: 0, filePath: state?.filePath ?? null, project };
   } catch {
     return null;
   }
@@ -117,7 +119,9 @@ async function offerRecovery() {
   let backup: AutosaveFile | null = null;
   try {
     const raw = await a.autosaveRead();
-    if (raw) backup = JSON.parse(raw) as AutosaveFile;
+    const parsed = raw ? JSON.parse(raw) as AutosaveFile | { version: 1; savedAt: number; filePath: string | null; project: ProjectFileV1 } : null;
+    if (parsed?.version === 2) backup = parsed;
+    else if (parsed) backup = { ...parsed, version: 2, project: projectFromFile(migrateProjectFile({ ...parsed.project, schemaVersion: 1 })) };
   } catch { /* corrupt backup: ignore */ }
   backup ??= readLegacySession();
   if (!backup?.project) return;
@@ -129,14 +133,7 @@ async function offerRecovery() {
     buttons: ['Restore', 'Discard'],
   });
   if (choice === 0) {
-    const sceneIds = new Set(backup.project.scenes.map((s) => s.id));
-    useStore.getState().loadProject(backup.project, backup.filePath, {
-      dirty: true,
-      scenes: {
-        currentSceneId: backup.currentSceneId && sceneIds.has(backup.currentSceneId) ? backup.currentSceneId : null,
-        untitledScene: backup.untitledScene ?? null,
-      },
-    });
+    useStore.getState().loadProject(backup.project, backup.filePath, { dirty: true });
   } else {
     await a.autosaveClear();
   }
@@ -162,14 +159,7 @@ export async function startDocumentSession() {
     timer = null;
     const s = useStore.getState();
     if (!selectIsDirty(s)) return;
-    const payload: AutosaveFile = {
-      version: 1,
-      savedAt: Date.now(),
-      filePath: s.filePath,
-      project: s.project,
-      currentSceneId: s.currentSceneId,
-      untitledScene: s.untitledScene,
-    };
+    const payload: AutosaveFile = { version: 2, savedAt: Date.now(), filePath: s.filePath, project: s.project };
     a.autosaveWrite(JSON.stringify(payload)).catch(() => { /* disk full etc.; retry on next change */ });
   };
 
@@ -194,10 +184,7 @@ export async function startDocumentSession() {
         timer = null;
         a.autosaveClear();
       }
-    } else if (
-      !timer &&
-      (s.project !== prev.project || s.currentSceneId !== prev.currentSceneId || s.untitledScene !== prev.untitledScene)
-    ) {
+    } else if (!timer && s.project !== prev.project) {
       // Throttle (not debounce) so a long slider drag still gets backed up.
       timer = setTimeout(writeBackup, AUTOSAVE_INTERVAL_MS);
     }

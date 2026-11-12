@@ -16,7 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useShallow } from 'zustand/react/shallow';
-import { useStore, captureGroupStates, sceneDiffersFromLive } from '../state/store';
+import { useStore, isEmptyCanvas } from '../state/store';
 import { newDocument, openDocument, saveDocument, saveAndClose } from '../state/document';
 import { MasterOutNode } from '../components/nodes/MasterOutNode';
 import { SoundNode } from '../components/nodes/SoundNode';
@@ -383,57 +383,80 @@ function LibraryItem({ file }: { file: AudioFile }) {
 
 function ScenesPanel() {
   const scenes = useStore((s) => s.project.scenes);
-  const currentSceneId = useStore((s) => s.currentSceneId);
-  const untitledScene = useStore((s) => s.untitledScene);
-  const currentModified = useStore((s) => {
-    const cur = s.project.scenes.find((sc) => sc.id === s.currentSceneId);
-    return !!cur && sceneDiffersFromLive(cur.groupStates, captureGroupStates(s.project));
-  });
-  const { saveSceneAs, saveCurrentScene, newScene, setCurrentScene, deleteScene, renameScene } = useStore(useShallow((s) => ({
-    saveSceneAs: s.saveSceneAs, saveCurrentScene: s.saveCurrentScene, newScene: s.newScene,
-    setCurrentScene: s.setCurrentScene, deleteScene: s.deleteScene, renameScene: s.renameScene,
+  const currentSceneId = useStore((s) => s.project.currentSceneId);
+  // The live canvas (top-level nodes/edges) is the current scene's real content.
+  const currentEmpty = useStore((s) => isEmptyCanvas(s.project));
+  const { switchScene, newScene, duplicateScene, renameScene, deleteScene } = useStore(useShallow((s) => ({
+    switchScene: s.switchScene, newScene: s.newScene, duplicateScene: s.duplicateScene,
+    renameScene: s.renameScene, deleteScene: s.deleteScene,
   })));
   const [crossfadeDur, setCrossfadeDur] = useState(2);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const [naming, setNaming] = useState(false);
-  const [nameDraft, setNameDraft] = useState('');
+  const [duplicating, setDuplicating] = useState(false);
 
-  const onUntitled = currentSceneId === null;
-  const showUntitled = onUntitled || untitledScene !== null;
+  const current = scenes.find((sc) => sc.id === currentSceneId);
+  const onEmptyUntitled = !!current?.untitled && currentEmpty;
 
-  const startNaming = () => {
-    let n = scenes.length + 1;
+  const suggestName = () => {
+    let n = scenes.filter((sc) => !sc.untitled).length + 1;
     while (scenes.some((sc) => sc.name === `Scene ${n}`)) n++;
-    setNameDraft(`Scene ${n}`);
-    setNaming(true);
+    return `Scene ${n}`;
   };
-  const commitName = () => {
-    const name = nameDraft.trim();
-    if (name) saveSceneAs(name);
-    setNaming(false);
+  const startRename = (sc: Scene) => {
+    setDuplicating(false);
+    setDraft(sc.untitled ? suggestName() : sc.name);
+    setEditingId(sc.id);
+  };
+  const commitRename = (sc: Scene) => {
+    const name = draft.trim();
+    if (name) renameScene(sc.id, name);
+    setEditingId(null);
+  };
+  const saveAs = () => {
+    if (!current) return;
+    if (current.untitled) { startRename(current); return; }
+    setEditingId(null);
+    setDraft(`${current.name} copy`);
+    setDuplicating(true);
+  };
+  const commitDuplicate = () => {
+    const name = draft.trim();
+    if (name) duplicateScene(name);
+    setDuplicating(false);
   };
 
-  const recall = (sc: Scene) => {
-    setCurrentScene(sc.id); // stashes the Untitled scene first if we're leaving it
-    audioEngine.recallScene(sc, crossfadeDur);
+  // Each of these swaps the canvas, so fade the outgoing scene first.
+  const goTo = (id: string) => {
+    if (id === currentSceneId) return;
+    audioEngine.beginSceneSwitch(crossfadeDur);
+    switchScene(id);
   };
-  const recallUntitled = () => {
-    if (!untitledScene) return;
-    const states = untitledScene;
-    setCurrentScene(null);
-    audioEngine.recallScene({ id: 'untitled', name: 'Untitled scene', groupStates: states }, crossfadeDur);
+  const startNewScene = () => {
+    if (onEmptyUntitled) return;
+    audioEngine.beginSceneSwitch(crossfadeDur);
+    newScene();
   };
-  const startNewScene = async () => {
-    if (untitledScene && window.audioNodes) {
+  const remove = async (sc: Scene) => {
+    const isCurrent = sc.id === currentSceneId;
+    const empty = isCurrent ? currentEmpty : isEmptyCanvas(sc);
+    if (!empty && window.audioNodes) {
       const choice = await window.audioNodes.showMessageBox({
-        title: 'New scene',
-        message: 'Discard the unsaved Untitled scene and start a new one from what is playing now?',
-        buttons: ['Start New Scene', 'Cancel'],
+        title: 'Delete scene',
+        message: `Delete "${sc.untitled ? 'Untitled scene' : sc.name}" and all of its nodes?`,
+        buttons: ['Delete', 'Cancel'],
       });
       if (choice !== 0) return;
     }
-    newScene();
+    if (isCurrent) audioEngine.beginSceneSwitch(crossfadeDur);
+    deleteScene(sc.id);
+  };
+
+  let untitledCount = 0;
+  const label = (sc: Scene) => {
+    if (!sc.untitled) return sc.name;
+    untitledCount++;
+    return untitledCount > 1 ? `Untitled scene ${untitledCount}` : 'Untitled scene';
   };
 
   return (
@@ -441,86 +464,77 @@ function ScenesPanel() {
       <div className="sidebar__section-header">
         <h2>Scenes</h2>
         <div className="scenes__header-actions">
-          <button className="an-btn" onClick={startNewScene} disabled={onUntitled}
-            title="Start a new untitled scene from what's playing now">New</button>
-          <button className="an-btn" onClick={startNaming}
-            title="Save what's playing now as a new named scene">Save As…</button>
+          <button className="an-btn" onClick={startNewScene} disabled={onEmptyUntitled}
+            title="Start a new, empty scene">New</button>
+          <button className="an-btn" onClick={saveAs}
+            title={current?.untitled ? 'Name this scene' : 'Save a copy of this scene under a new name'}>Save As…</button>
         </div>
       </div>
-      {scenes.length > 0 && (
+      {scenes.length > 1 && (
         <div className="scenes__fade-row">
           <span className="an-node__label">Fade</span>
-          <input type="range" className="insp__slider" min={0.5} max={10} step={0.5}
-            value={crossfadeDur} style={rangeFill(crossfadeDur, 0.5, 10)} onChange={(e) => setCrossfadeDur(parseFloat(e.target.value))} />
+          <input type="range" className="insp__slider" min={0} max={10} step={0.5}
+            value={crossfadeDur} style={rangeFill(crossfadeDur, 0, 10)} onChange={(e) => setCrossfadeDur(parseFloat(e.target.value))} />
           <span className="an-node__value">{crossfadeDur}s</span>
         </div>
       )}
       <ul className="library-list">
-        {naming && (
-          <li className="library-item library-item--current">
-            <input
-              className="library-item__rename"
-              value={nameDraft}
-              autoFocus
-              placeholder="Scene name"
-              onFocus={(e) => e.target.select()}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onBlur={() => setNaming(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitName();
-                if (e.key === 'Escape') setNaming(false);
-                e.stopPropagation();
-              }}
-            />
-          </li>
-        )}
-        {showUntitled && !(naming && onUntitled) && (
-          <li className={`library-item scene-item--untitled${onUntitled ? ' library-item--current' : ''}`}
-            title={onUntitled ? 'The live mix. Save it to keep it as a named scene.' : 'Unsaved scene from earlier'}>
-            <span className="library-item__name">Untitled scene</span>
-            {onUntitled ? (
-              <button className="an-btn scene-item__save" onClick={startNaming}>Save…</button>
-            ) : (
-              <button className="an-btn an-btn--play scene-item__play" onClick={recallUntitled} title="Recall">▶</button>
-            )}
-          </li>
-        )}
         {scenes.map((sc: Scene) => {
           const isCurrent = sc.id === currentSceneId;
+          const name = label(sc);
           return (
-            <li key={sc.id} className={`library-item${isCurrent ? ' library-item--current' : ''}`}>
+            <li key={sc.id} className={`library-item${isCurrent ? ' library-item--current' : ''}${sc.untitled ? ' scene-item--untitled' : ''}`}>
               {editingId === sc.id ? (
                 <input
                   className="library-item__rename"
                   value={draft}
                   autoFocus
+                  placeholder="Scene name"
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setDraft(e.target.value)}
-                  onBlur={() => { renameScene(sc.id, draft || sc.name); setEditingId(null); }}
+                  onBlur={() => commitRename(sc)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') { renameScene(sc.id, draft || sc.name); setEditingId(null); }
+                    if (e.key === 'Enter') commitRename(sc);
                     if (e.key === 'Escape') setEditingId(null);
                     e.stopPropagation();
                   }}
                 />
               ) : (
-                <span className="library-item__name" onDoubleClick={() => { setDraft(sc.name); setEditingId(sc.id); }}
-                  title="Double-click to rename">
-                  {sc.name}{isCurrent && currentModified && <span className="scene-item__modified" title="Modified since saved"> •</span>}
+                <span className="library-item__name" onDoubleClick={() => startRename(sc)}
+                  title={sc.untitled ? 'Unnamed scene. Double-click or Save… to name it.' : 'Double-click to rename'}>
+                  {name}
                 </span>
               )}
-              {isCurrent && currentModified && (
-                <button className="an-btn scene-item__save" onClick={saveCurrentScene}
-                  title="Update this scene with what's playing now">Save</button>
+              {sc.untitled && editingId !== sc.id && (
+                <button className="an-btn scene-item__save" onClick={() => startRename(sc)} title="Name this scene">Save…</button>
               )}
-              <button className="an-btn an-btn--play scene-item__play" onClick={() => recall(sc)} title="Recall">▶</button>
-              <button className="library-item__remove" onClick={() => deleteScene(sc.id)} title="Delete scene">×</button>
+              {!isCurrent && (
+                <button className="an-btn an-btn--play scene-item__play" onClick={() => goTo(sc.id)} title="Switch to this scene">▶</button>
+              )}
+              <button className="library-item__remove" onClick={() => remove(sc)} title="Delete scene">×</button>
             </li>
           );
         })}
+        {duplicating && (
+          <li className="library-item">
+            <input
+              className="library-item__rename"
+              value={draft}
+              autoFocus
+              placeholder="Scene name"
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => setDuplicating(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitDuplicate();
+                if (e.key === 'Escape') setDuplicating(false);
+                e.stopPropagation();
+              }}
+            />
+          </li>
+        )}
       </ul>
-      {scenes.length === 0 && !naming && (
-        <p className="hint">The live mix is the Untitled scene. Save it to recall it later.</p>
-      )}
+      <p className="hint">Each scene has its own canvas. Switching scenes fades one out and the next in.</p>
     </div>
   );
 }

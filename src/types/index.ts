@@ -66,10 +66,18 @@ export interface EffectNodeData {
   q: number;
 }
 
-export interface Scene {
+/** A scene's own canvas: the node graph and the hotkeys bound to its nodes. */
+export interface SceneCanvas {
+  nodes: ProjectNode[];
+  edges: ProjectEdge[];
+  hotkeys: HotkeyMap;
+}
+
+export interface Scene extends SceneCanvas {
   id: string;
   name: string;
-  groupStates: Array<{ groupId: string; volume: number; active: boolean }>;
+  /** Not yet given a name by the user. */
+  untitled?: boolean;
 }
 
 export interface YouTubeNodeData {
@@ -108,12 +116,30 @@ export interface ProjectEdge {
 
 export type HotkeyMap = Record<string, string>;
 
-export interface Project {
+/**
+ * In-memory project. The current scene's canvas lives in the top-level nodes/edges/hotkeys
+ * while it is being edited; its entry in `scenes` is stale until flushed (see flushScenes).
+ */
+export interface Project extends SceneCanvas {
+  schemaVersion: 2;
+  name: string;
+  library: AudioFile[];
+  scenes: Scene[];
+  currentSceneId: string;
+}
+
+/** On-disk project format (v2): every scene carries its own canvas. */
+export interface ProjectFileV2 {
+  schemaVersion: 2;
+  name: string;
+  library: AudioFile[];
+  scenes: Scene[];
+}
+
+/** Legacy on-disk format (v1): one shared canvas; scenes were group-state snapshots. */
+export interface ProjectFileV1 extends SceneCanvas {
   schemaVersion: 1;
   name: string;
   library: AudioFile[];
-  nodes: ProjectNode[];
-  edges: ProjectEdge[];
-  hotkeys: HotkeyMap;
-  scenes: Scene[];
+  scenes?: Array<{ id: string; name: string; groupStates: Array<{ groupId: string; volume: number; active: boolean }> }>;
 }

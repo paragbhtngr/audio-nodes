@@ -1,5 +1,5 @@
 import { useStore } from '../state/store';
-import type { Project, SoundNodeData, GroupNodeData, RandomPoolNodeData, EffectNodeData, Scene } from '../types';
+import type { Project, SoundNodeData, GroupNodeData, RandomPoolNodeData, EffectNodeData } from '../types';
 
 interface Track {
   gain: GainNode;
@@ -33,6 +33,8 @@ function createReverbImpulse(ctx: AudioContext, decay: number): AudioBuffer {
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  /** Everything the current scene routes to Master Out goes through this bus, so a scene can be faded as a whole. */
+  private sceneBus: GainNode | null = null;
   private tracks = new Map<string, Track>();
   private groupGains = new Map<string, GainNode>();
   private effectProcessors = new Map<string, EffectProcessor>();
@@ -47,6 +49,8 @@ class AudioEngine {
       this.ctx = new AudioContext();
       this.masterGain = this.ctx.createGain();
       this.masterGain.connect(this.ctx.destination);
+      this.sceneBus = this.ctx.createGain();
+      this.sceneBus.connect(this.masterGain);
     }
     return this.ctx;
   }
@@ -65,6 +69,7 @@ class AudioEngine {
     this.ctx?.close();
     this.ctx = null;
     this.masterGain = null;
+    this.sceneBus = null;
     this.tracks.clear();
     this.groupGains.clear();
     this.effectProcessors.clear();
@@ -77,7 +82,7 @@ class AudioEngine {
     if (!edge) return null;
     const target = project.nodes.find((n) => n.id === edge.target);
     if (!target) return null;
-    if (target.type === 'master') return this.masterGain;
+    if (target.type === 'master') return this.sceneBus;
     if (target.type === 'group') return this.groupGains.get(target.id) ?? null;
     if (target.type === 'effect') return this.effectProcessors.get(target.id)?.input ?? null;
     return null;
@@ -335,41 +340,48 @@ class AudioEngine {
     }, duration * 1000);
   }
 
-  recallScene(scene: Scene, duration: number) {
+  /**
+   * Call just before the store swaps in another scene's canvas. The outgoing scene's audio graph
+   * is detached onto its own bus and faded out over `duration` seconds while the incoming scene
+   * (built fresh by the next reconcile) fades in on a new bus.
+   */
+  beginSceneSwitch(duration: number) {
     const ctx = this.ctx_();
-    const project = useStore.getState().project;
+    const now = ctx.currentTime;
+    const oldBus = this.sceneBus!;
+    const tracks = [...this.tracks.values()];
+    const groups = [...this.groupGains.values()];
+    const effects = [...this.effectProcessors.values()];
+    this.tracks = new Map();
+    this.groupGains = new Map();
+    this.effectProcessors = new Map();
+    this.crossfadingGroups.clear();
+    this.lastEdgeKey = '';
 
-    for (const gs of scene.groupStates) {
-      const groupGain = this.groupGains.get(gs.groupId);
-      if (!groupGain) continue;
-      const node = project.nodes.find((n) => n.id === gs.groupId);
-      if (!node) continue;
+    oldBus.gain.cancelScheduledValues(now);
+    oldBus.gain.setValueAtTime(oldBus.gain.value, now);
+    oldBus.gain.linearRampToValueAtTime(0, now + duration);
 
-      this.crossfadingGroups.add(gs.groupId);
-      const memberIds = project.edges.filter((e) => e.target === gs.groupId).map((e) => e.source);
+    const newBus = ctx.createGain();
+    newBus.gain.setValueAtTime(0, now);
+    newBus.gain.linearRampToValueAtTime(1, now + duration);
+    newBus.connect(this.masterGain!);
+    this.sceneBus = newBus;
 
-      if (gs.active) {
-        memberIds.forEach((id) => useStore.getState().updateNodeData(id, { playing: true }));
-        groupGain.gain.cancelScheduledValues(ctx.currentTime);
-        groupGain.gain.setValueAtTime(groupGain.gain.value, ctx.currentTime);
-        groupGain.gain.linearRampToValueAtTime(gs.volume, ctx.currentTime + duration);
-        setTimeout(() => {
-          this.crossfadingGroups.delete(gs.groupId);
-          useStore.getState().updateNodeData(gs.groupId, { volume: gs.volume });
-        }, duration * 1000);
-      } else {
-        const fromVol = groupGain.gain.value;
-        groupGain.gain.cancelScheduledValues(ctx.currentTime);
-        groupGain.gain.setValueAtTime(fromVol, ctx.currentTime);
-        groupGain.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
-        setTimeout(() => {
-          memberIds.forEach((id) => useStore.getState().updateNodeData(id, { playing: false }));
-          groupGain.gain.setValueAtTime(gs.volume, this.ctx_().currentTime);
-          this.crossfadingGroups.delete(gs.groupId);
-          useStore.getState().updateNodeData(gs.groupId, { volume: gs.volume });
-        }, duration * 1000);
+    for (const t of tracks) {
+      const src = t.source;
+      t.source = null; // detaches onended, which would otherwise touch same-id nodes in the new scene
+      if (src) {
+        src.onended = null;
+        try { src.stop(now + duration); } catch { /* already stopped */ }
       }
     }
+    setTimeout(() => {
+      tracks.forEach((t) => { t.panner.disconnect(); t.gain.disconnect(); });
+      groups.forEach((g) => g.disconnect());
+      effects.forEach((e) => { e.input.disconnect(); e.output.disconnect(); });
+      oldBus.disconnect();
+    }, duration * 1000 + 100);
   }
 
   private startSource(nodeId: string, data: PlayableData, buffer: AudioBuffer) {
