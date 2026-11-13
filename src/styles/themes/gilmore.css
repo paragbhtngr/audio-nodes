@@ -530,3 +530,30 @@
     0 1px 3px #000,
     0 0 10px rgba(240, 210, 122, 0.9);
 }
+
+/* Icon toolbar buttons: parchment-and-gold tooltips */
+[data-theme="gilmore"] .tool-btn::after {
+  background: #1a0f2b;
+  border-color: var(--gold-dim);
+  color: var(--parchment);
+  font-family: var(--display);
+  letter-spacing: 1px;
+  font-size: 13px;
+}
+
+/* Settings modal */
+[data-theme="gilmore"] .settings { background: #1a0f2b; border: 1px solid var(--gold-dim); color: var(--parchment); }
+[data-theme="gilmore"] .settings__nav { background: #120a20; border-right-color: var(--gold-dim); }
+[data-theme="gilmore"] .settings__nav-title,
+[data-theme="gilmore"] .settings__title { font-family: var(--display); letter-spacing: 1px; color: var(--gold-bright); }
+[data-theme="gilmore"] .settings__nav-item { color: var(--parchment); font-family: var(--display); font-size: 15px; letter-spacing: 1px; }
+[data-theme="gilmore"] .settings__nav-item--active,
+[data-theme="gilmore"] .settings__nav-item--active:hover { color: var(--gold-bright); background: rgba(212, 175, 90, 0.15); }
+[data-theme="gilmore"] .settings__integration { border-color: var(--gold-dim); }
+
+/* Freesound modal */
+[data-theme="gilmore"] .search-modal { background: #1a0f2b; border: 1px solid var(--gold-dim); color: var(--parchment); }
+[data-theme="gilmore"] .search-modal__title { font-family: var(--display); letter-spacing: 1px; color: var(--gold-bright); }
+[data-theme="gilmore"] .search-modal__header,
+[data-theme="gilmore"] .search-modal__footer,
+[data-theme="gilmore"] .search-item { border-color: var(--gold-dim); }

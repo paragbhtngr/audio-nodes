@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useStore } from '../../state/store';
 import { usePrefabStore } from '../../state/prefabStore';
 import { audioEngine } from '../../audio/engine';
+import { YouTubeModal } from '../youtube/YouTubeModal';
 import type { SoundNodeData, MasterNodeData, GroupNodeData, RandomPoolNodeData, EffectNodeData, YouTubeNodeData } from '../../types';
 import { rangeFill } from '../rangeFill';
 
@@ -557,39 +558,16 @@ function MasterInspector({ id }: { id: string }) {
   );
 }
 
-type YTResult = { videoId: string; title: string; duration: string; thumbnail: string };
-
 function YouTubeInspector({ id }: { id: string }) {
   const data = useStore((s) => {
     const node = s.project.nodes.find((n) => n.id === id);
     return node?.data as YouTubeNodeData | undefined;
   });
   const update = useStore((s) => s.updateNodeData);
-
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<YTResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   if (!data) return null;
   const u = (patch: Partial<YouTubeNodeData>) => update(id, patch);
-
-  const search = async () => {
-    if (!query.trim()) return;
-    setSearching(true);
-    setResults([]);
-    try {
-      const r = await window.audioNodes.youtubeSearch(query.trim());
-      setResults(r);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const select = (r: YTResult) => {
-    u({ videoId: r.videoId, title: r.title, playing: false });
-    setResults([]);
-    setQuery('');
-  };
 
   return (
     <>
@@ -607,34 +585,17 @@ function YouTubeInspector({ id }: { id: string }) {
         </>
       )}
 
-      <div className="insp__section-title">Search</div>
       <div className="insp__field">
-        <div className="insp__yt-search-row">
-          <input
-            className="insp__yt-input"
-            placeholder="Search YouTube…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') search(); }}
-          />
-          <button className="an-btn" onClick={search} disabled={searching} style={{ flexShrink: 0 }}>
-            {searching ? '…' : '🔍'}
-          </button>
-        </div>
+        <button className="an-btn" onClick={() => setSearchOpen(true)}>
+          {data.videoId ? 'Change video…' : 'Search YouTube…'}
+        </button>
       </div>
-
-      {results.length > 0 && (
-        <ul className="insp__yt-results">
-          {results.map((r) => (
-            <li key={r.videoId} className="insp__yt-result" onClick={() => select(r)}>
-              {r.thumbnail && <img className="insp__yt-result-thumb" src={r.thumbnail} alt="" />}
-              <div className="insp__yt-result-info">
-                <span className="insp__yt-result-title">{r.title}</span>
-                {r.duration && <span className="insp__yt-result-dur">{r.duration}</span>}
-              </div>
-            </li>
-          ))}
-        </ul>
+      {searchOpen && (
+        <YouTubeModal
+          actionLabel="Use"
+          onClose={() => setSearchOpen(false)}
+          onSelect={(r) => { u({ videoId: r.videoId, title: r.title, playing: false }); setSearchOpen(false); }}
+        />
       )}
 
       <div className="insp__section-title">Playback</div>

@@ -80,6 +80,12 @@ contextBridge.exposeInMainWorld('audioNodes', {
     return () => ipcRenderer.removeListener('hotkey:triggered', handler);
   },
 
-  youtubeSearch: (query: string): Promise<Array<{ videoId: string; title: string }>> =>
-    ipcRenderer.invoke('youtube:search', query),
+  freesoundSearch: (apiKey: string, query: string, page: number) =>
+    ipcRenderer.invoke('freesound:search', apiKey, query, page),
+
+  freesoundDownload: (id: number, previewUrl: string): Promise<string> =>
+    ipcRenderer.invoke('freesound:download', id, previewUrl),
+
+  youtubeSearch: (query: string, continuation?: string) =>
+    ipcRenderer.invoke('youtube:search', query, continuation),
 });

@@ -170,7 +170,7 @@ export function YouTubeNode({ id }: NodeProps) {
       <div className="an-node__header">
         {data.videoId
           ? <span className="an-node__filename" title={data.title}>{data.title || 'Untitled'}</span>
-          : <span className="an-node__muted">No video — search in inspector</span>}
+          : <span className="an-node__muted">No video — pick one in inspector</span>}
         <button className="an-node__delete" onClick={() => removeNode(id)} title="Remove node">×</button>
       </div>
       <div className="an-node__progress">

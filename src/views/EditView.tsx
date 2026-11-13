@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -29,7 +29,10 @@ import { useRecentStore } from '../state/recentStore';
 import { audioEngine } from '../audio/engine';
 import { Inspector } from '../components/inspector/Inspector';
 import { HotkeyHUD } from '../components/HotkeyHUD';
-import { ThemePicker } from '../components/ThemePicker';
+import { SettingsModal } from '../components/settings/SettingsModal';
+import { YouTubeModal, type YouTubeResult } from '../components/youtube/YouTubeModal';
+import { FreesoundModal } from '../components/freesound/FreesoundModal';
+import { useSettingsStore } from '../state/settings';
 import type { AudioFile, AudioNodeData, SoundNodeData, GroupNodeData, RandomPoolNodeData, YouTubeNodeData, EffectType, Scene } from '../types';
 import { rangeFill } from '../components/rangeFill';
 
@@ -274,25 +277,53 @@ function Canvas() {
     addNodeToCanvas(id);
   }, [addEffectNode, addNodeToCanvas]);
 
-  const addYT = useCallback(() => {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [freesoundOpen, setFreesoundOpen] = useState(false);
+  const [youtubeOpen, setYoutubeOpen] = useState(false);
+  const freesoundReady = useSettingsStore((s) => s.integrations.freesound && s.freesoundApiKey.trim() !== '');
+
+  const addYT = useCallback((r: YouTubeResult) => {
     const id = addYouTubeNode({ x: 300, y: 200 });
+    useStore.getState().updateNodeData(id, { videoId: r.videoId, title: r.title });
     addNodeToCanvas(id);
+    setYoutubeOpen(false);
   }, [addYouTubeNode, addNodeToCanvas]);
 
   return (
     <div className="canvas-wrapper">
       <div className="canvas-toolbar">
-        <button className="an-btn" onClick={addGroup}>+ Group</button>
-        <button className="an-btn" onClick={addPool}>+ Random Pool</button>
-        <select className="an-btn" style={{ cursor: 'pointer' }}
-          value="" onChange={(e) => { if (e.target.value) { addEffect(e.target.value as EffectType); e.target.value = ''; } }}>
-          <option value="">+ Effect…</option>
-          <option value="reverb">Reverb</option>
-          <option value="lowpass">Low Pass</option>
-          <option value="highpass">High Pass</option>
-        </select>
-        <button className="an-btn" onClick={addYT}>+ YouTube</button>
+        <ToolButton label="Add Group" onClick={addGroup}>
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" strokeDasharray="3 2" /><rect x="7" y="7" width="4" height="4" /><rect x="13" y="13" width="4" height="4" /></svg>
+        </ToolButton>
+        <ToolButton label="Add Random Pool" onClick={addPool}>
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8" cy="8" r="1.2" fill="currentColor" /><circle cx="16" cy="8" r="1.2" fill="currentColor" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /><circle cx="8" cy="16" r="1.2" fill="currentColor" /><circle cx="16" cy="16" r="1.2" fill="currentColor" /></svg>
+        </ToolButton>
+        <span className="canvas-toolbar__sep" />
+        <ToolButton label="Add Reverb" onClick={() => addEffect('reverb')}>
+          <svg viewBox="0 0 24 24"><path d="M4 12h2M8 8v8M12 5v14M16 8v8M20 12h-2" /></svg>
+        </ToolButton>
+        <ToolButton label="Add Low Pass" onClick={() => addEffect('lowpass')}>
+          <svg viewBox="0 0 24 24"><path d="M3 8h9c3 0 4 1 5 4s2 4 4 4" /></svg>
+        </ToolButton>
+        <ToolButton label="Add High Pass" onClick={() => addEffect('highpass')}>
+          <svg viewBox="0 0 24 24"><path d="M3 16c2 0 3-1 4-4s2-4 5-4h9" /></svg>
+        </ToolButton>
+        <span className="canvas-toolbar__sep" />
+        <ToolButton label="Add YouTube" onClick={() => setYoutubeOpen(true)}>
+          <svg viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="13" rx="4" /><path d="M10 9.5v5l4.5-2.5z" fill="currentColor" /></svg>
+        </ToolButton>
+        {freesoundReady && (
+          <ToolButton label="Search Freesound" onClick={() => setFreesoundOpen(true)}>
+            <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6" /><path d="M15 15l5.5 5.5" /><path d="M8 10.5v0M10.5 8v5M13 9.5v2" /></svg>
+          </ToolButton>
+        )}
+        <ToolButton label="Settings" className="tool-btn--end" onClick={() => setSettingsOpen(true)}>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1" /><circle cx="12" cy="12" r="6.5" /></svg>
+        </ToolButton>
       </div>
+      {youtubeOpen && <YouTubeModal actionLabel="Add" onSelect={addYT} onClose={() => setYoutubeOpen(false)} />}
+      {freesoundOpen && freesoundReady && <FreesoundModal onClose={() => setFreesoundOpen(false)} />}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
       <div className="canvas">
       <ReactFlow
         nodes={nodes}
@@ -315,6 +346,14 @@ function Canvas() {
       <HotkeyHUD />
     </div>
     </div>
+  );
+}
+
+function ToolButton({ label, onClick, className = '', children }: { label: string; onClick: () => void; className?: string; children: ReactNode }) {
+  return (
+    <button className={`an-btn tool-btn ${className}`} onClick={onClick} aria-label={label} data-tip={label}>
+      {children}
+    </button>
   );
 }
 
@@ -707,7 +746,7 @@ function LibraryPanel() {
         <h2>Library</h2>
         <div className="sidebar__add-row">
           <button className="an-btn an-btn--primary sidebar__add-btn" onClick={pickFiles}>+ Files</button>
-          <button className="an-btn sidebar__add-btn" onClick={pickFolder}>Open Folder</button>
+          <button className="an-btn sidebar__add-btn" onClick={pickFolder}>Import Folder</button>
         </div>
         {library.length === 0 && (
           <p className="hint">Add audio files, then drag them onto the canvas.</p>
@@ -720,7 +759,6 @@ function LibraryPanel() {
         </ul>
         <PrefabsPanel />
         <ScenesPanel />
-        <ThemePicker />
       </div>
       <NowPlayingPanel />
     </aside>

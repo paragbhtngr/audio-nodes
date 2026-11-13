@@ -4,6 +4,7 @@ export interface AudioFile {
   name: string;
   duration?: number;
   folder?: string; // relative path from import root, e.g. "Sounds/Ambience"; undefined = individually added
+  source?: { provider: 'freesound'; url: string; author: string; license: string }; // attribution for downloaded sounds
 }
 
 export interface SoundNodeData {

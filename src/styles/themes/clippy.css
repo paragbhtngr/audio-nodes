@@ -491,3 +491,41 @@
   text-transform: none;
   letter-spacing: 0;
 }
+
+/* Icon toolbar buttons: keep centred under the skin's button padding; tooltip-yellow tips */
+[data-theme="clippy"] .tool-btn,
+[data-theme="clippy"] .tool-btn:active:not(:disabled) { padding: 0; }
+[data-theme="clippy"] .tool-btn:active:not(:disabled) svg { transform: translate(1px, 1px); }
+[data-theme="clippy"] .tool-btn::after {
+  background: var(--w98-tooltip);
+  border: 1px solid #000000;
+  border-radius: 0;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.35);
+  color: #000000;
+}
+
+/* Settings modal: a Win98 dialog */
+[data-theme="clippy"] .settings {
+  background: var(--w98-face);
+  border: none;
+  border-radius: 0;
+  box-shadow: var(--w98-raised), 4px 4px 0 rgba(0, 0, 0, 0.35);
+  color: #000000;
+}
+[data-theme="clippy"] .settings__nav { background: #ffffff; border-right: none; box-shadow: var(--w98-sunken); margin: 6px 0 6px 6px; }
+[data-theme="clippy"] .settings__nav-item { color: #000000; border-radius: 0; }
+[data-theme="clippy"] .settings__nav-item:hover { background: transparent; }
+[data-theme="clippy"] .settings__nav-item--active,
+[data-theme="clippy"] .settings__nav-item--active:hover { background: var(--w98-navy, #000080); color: #ffffff; }
+[data-theme="clippy"] .settings__integration { border-radius: 0; border-color: var(--w98-shadow); }
+[data-theme="clippy"] .settings__hint,
+[data-theme="clippy"] .settings__integration-desc,
+[data-theme="clippy"] .settings__group-label,
+[data-theme="clippy"] .settings__field { color: #404040; }
+
+/* Freesound modal: Win98 dialog */
+[data-theme="clippy"] .search-modal { background: var(--w98-face); border: none; border-radius: 0; box-shadow: var(--w98-raised), 4px 4px 0 rgba(0, 0, 0, 0.35); color: #000000; }
+[data-theme="clippy"] .search-modal__header,
+[data-theme="clippy"] .search-modal__footer { border-color: var(--w98-shadow); color: #000000; }
+[data-theme="clippy"] .search-item { border-radius: 0; border-color: var(--w98-shadow); }
+[data-theme="clippy"] .search-item__meta { color: #404040; }

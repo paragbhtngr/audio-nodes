@@ -321,36 +321,110 @@ ipcMain.handle('path:absolutize', (_evt, projectPath: string, relPath: string) =
   path.resolve(path.dirname(projectPath), relPath)
 );
 
-ipcMain.handle('youtube:search', async (_evt, query: string) => {
+// Freesound: search and preview download. Network calls live here to stay clear of the renderer CSP.
+interface FreesoundResult {
+  id: number;
+  name: string;
+  username: string;
+  license: string;
+  duration: number;
+  url: string;
+  previewUrl: string;
+}
+
+ipcMain.handle('freesound:search', async (_evt, apiKey: string, query: string, page: number) => {
+  const params = new URLSearchParams({
+    query,
+    page: String(page),
+    page_size: '15',
+    fields: 'id,name,username,license,duration,url,previews',
+    token: apiKey,
+  });
+  const res = await fetch(`https://freesound.org/apiv2/search/text/?${params}`);
+  if (res.status === 401 || res.status === 403) throw new Error('Freesound rejected the API key.');
+  if (res.status === 429) throw new Error('Freesound rate limit reached. Try again in a minute.');
+  if (!res.ok) throw new Error(`Freesound search failed (${res.status}).`);
+  const data = await res.json() as {
+    count: number;
+    next: string | null;
+    results: Array<{
+      id: number; name: string; username: string; license: string; duration: number; url: string;
+      previews?: Record<string, string>;
+    }>;
+  };
+  const results: FreesoundResult[] = data.results.flatMap((r) => {
+    const previewUrl = r.previews?.['preview-hq-ogg'] ?? r.previews?.['preview-hq-mp3'];
+    return previewUrl
+      ? [{ id: r.id, name: r.name, username: r.username, license: r.license, duration: r.duration, url: r.url, previewUrl }]
+      : [];
+  });
+  return { count: data.count, hasNext: data.next !== null, results };
+});
+
+ipcMain.handle('freesound:download', async (_evt, id: number, previewUrl: string) => {
+  if (!/^https:\/\/(cdn\.)?freesound\.org\//.test(previewUrl)) throw new Error('Unexpected download URL.');
+  const ext = path.extname(new URL(previewUrl).pathname) || '.ogg';
+  const dir = path.join(app.getPath('userData'), 'freesound');
+  const dest = path.join(dir, `${Math.trunc(id)}${ext}`);
+  try {
+    await fs.access(dest);
+    return dest;
+  } catch { /* not downloaded yet */ }
+  const res = await fetch(previewUrl);
+  if (!res.ok) throw new Error(`Download failed (${res.status}).`);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(dest, Buffer.from(await res.arrayBuffer()));
+  return dest;
+});
+
+// YouTube search is paged with continuation tokens: the first call takes a query, later calls take the
+// token returned with the previous page.
+interface YouTubeSearchItem { videoId: string; title: string; duration: string; thumbnail: string }
+
+ipcMain.handle('youtube:search', async (_evt, query: string, continuation?: string) => {
+  const context = { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en' } };
   const res = await fetch('https://www.youtube.com/youtubei/v1/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      context: { client: { clientName: 'WEB', clientVersion: '2.20240101.00.00', hl: 'en' } },
-      query,
-      params: 'EgIQAQ==', // videos only
-    }),
+    body: JSON.stringify(
+      continuation
+        ? { context, continuation }
+        : { context, query, params: 'EgIQAQ==' } // videos only
+    ),
   });
+  if (!res.ok) throw new Error(`YouTube search failed (${res.status}).`);
   const data = await res.json() as Record<string, unknown>;
-  const results: Array<{ videoId: string; title: string; duration: string; thumbnail: string }> = [];
+  const results: YouTubeSearchItem[] = [];
+  let nextToken: string | null = null;
   try {
     type Thumbnail = { url: string; width: number; height: number };
-    type Section = { itemSectionRenderer?: { contents: Item[] } };
-    type Item = {
-      videoRenderer?: {
-        videoId: string;
-        title: { runs: { text: string }[] };
-        lengthText?: { simpleText: string };
-        thumbnail?: { thumbnails: Thumbnail[] };
-      };
+    type Entry = {
+      itemSectionRenderer?: { contents: Array<{
+        videoRenderer?: {
+          videoId: string;
+          title: { runs: { text: string }[] };
+          lengthText?: { simpleText: string };
+          thumbnail?: { thumbnails: Thumbnail[] };
+        };
+      }> };
+      continuationItemRenderer?: { continuationEndpoint?: { continuationCommand?: { token?: string } } };
     };
-    const sections = (
-      (data.contents as Record<string, unknown>)
-        ?.twoColumnSearchResultsRenderer as Record<string, unknown>
-    )?.primaryContents as Record<string, unknown>;
-    const list = (sections?.sectionListRenderer as Record<string, unknown>)?.contents as Section[] ?? [];
-    for (const section of list) {
-      for (const item of section.itemSectionRenderer?.contents ?? []) {
+    let entries: Entry[];
+    if (continuation) {
+      // Continuation replies list their commands under onResponseReceivedCommands.
+      const cmds = (data.onResponseReceivedCommands ?? data.onResponseCommands) as Array<{
+        appendContinuationItemsAction?: { continuationItems?: Entry[] };
+      }> | undefined;
+      entries = cmds?.flatMap((c) => c.appendContinuationItemsAction?.continuationItems ?? []) ?? [];
+    } else {
+      const primary = (
+        (data.contents as Record<string, unknown>)
+          ?.twoColumnSearchResultsRenderer as Record<string, unknown>
+      )?.primaryContents as Record<string, unknown>;
+      entries = (primary?.sectionListRenderer as Record<string, unknown>)?.contents as Entry[] ?? [];
+    }
+    for (const entry of entries) {
+      for (const item of entry.itemSectionRenderer?.contents ?? []) {
         const vr = item.videoRenderer;
         if (vr?.videoId) {
           const thumbs = vr.thumbnail?.thumbnails ?? [];
@@ -361,12 +435,11 @@ ipcMain.handle('youtube:search', async (_evt, query: string) => {
             thumbnail: thumbs[thumbs.length - 1]?.url ?? '',
           });
         }
-        if (results.length >= 8) break;
       }
-      if (results.length >= 8) break;
+      nextToken = entry.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token ?? nextToken;
     }
   } catch { /* ignore parse errors */ }
-  return results;
+  return { results, continuation: nextToken };
 });
 
 let currentHotkeys: Record<string, string> = {};

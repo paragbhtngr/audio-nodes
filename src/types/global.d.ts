@@ -1,5 +1,15 @@
 declare module '*.css' {}
 
+export interface FreesoundResult {
+  id: number;
+  name: string;
+  username: string;
+  license: string;
+  duration: number;
+  url: string;
+  previewUrl: string;
+}
+
 export interface AudioNodesAPI {
   platform: NodeJS.Platform;
   versions: {
@@ -43,8 +53,15 @@ export interface AudioNodesAPI {
   // Menu events from main process
   onMenuAction: (cb: (action: string) => void) => () => void;
 
+  // Freesound
+  freesoundSearch: (apiKey: string, query: string, page: number) => Promise<{ count: number; hasNext: boolean; results: FreesoundResult[] }>;
+  freesoundDownload: (id: number, previewUrl: string) => Promise<string>;
+
   // YouTube search
-  youtubeSearch: (query: string) => Promise<Array<{ videoId: string; title: string; duration: string; thumbnail: string }>>;
+  youtubeSearch: (query: string, continuation?: string) => Promise<{
+    results: Array<{ videoId: string; title: string; duration: string; thumbnail: string }>;
+    continuation: string | null;
+  }>;
 }
 
 declare global {
