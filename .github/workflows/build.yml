@@ -69,4 +69,4 @@ jobs:
           gh release create "$GITHUB_REF_NAME" artifacts/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "Foaly ${GITHUB_REF_NAME#v}" \
-            --generate-notes --prerelease
+            --generate-notes --latest
