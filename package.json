@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder --publish never"
   },
   "keywords": [],
   "author": "",
@@ -34,7 +34,8 @@
           ]
         }
       ],
-      "icon": "build/icon.icns"
+      "icon": "build/icon.icns",
+      "artifactName": "Foaly-mac-${arch}.${ext}"
     },
     "win": {
       "target": [
@@ -45,7 +46,8 @@
           ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "artifactName": "Foaly-windows-${arch}.${ext}"
     }
   },
   "dependencies": {
