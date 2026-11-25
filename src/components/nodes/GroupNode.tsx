@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, type CSSProperties } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useStore } from '../../state/store';
-import type { GroupNodeData, SoundNodeData, YouTubeNodeData } from '../../types';
+import type { GroupNodeData, RandomPoolNodeData, SoundNodeData, YouTubeNodeData } from '../../types';
 import { rangeFill } from '../rangeFill';
 
 export function GroupNode({ id }: NodeProps) {
@@ -61,7 +61,8 @@ export function GroupNode({ id }: NodeProps) {
 
   const memberName = (n: typeof nodes[number]) => {
     if (n.type === 'youtube') return (n.data as YouTubeNodeData).title || 'YouTube';
-    if (n.type === 'randomPool') return 'Random Pool';
+    if (n.type === 'group') return (n.data as GroupNodeData).label || 'Group';
+    if (n.type === 'randomPool') return (n.data as RandomPoolNodeData).label || 'Random Pool';
     if (n.type !== 'sound') return n.type;
     const d = n.data as SoundNodeData;
     return d.fileId ? (library.find((f) => f.id === d.fileId)?.name ?? 'Sound') : 'Sound';
